@@ -107,12 +107,3 @@ def validate_itinerary_places(
             activity["verified_place"] = place
 
     return itinerary
-
-
-result = search_place(
-    name="广州塔",
-    location="海珠区",
-    destination="广州市",
-)
-
-print(result)

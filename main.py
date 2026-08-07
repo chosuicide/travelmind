@@ -426,6 +426,18 @@ def get_trip(
                         "estimated_cost": activity.estimated_cost,
                         "description": activity.description,
                         "order": activity.order,
+                        "verified_place": (
+                            {
+                                "provider": activity.place_provider,
+                                "provider_id": activity.place_provider_id,
+                                "name": activity.verified_name,
+                                "address": activity.verified_address,
+                                "latitude": activity.latitude,
+                                "longitude": activity.longitude,
+                            }
+                            if activity.place_provider is not None
+                            else None
+                        ),
                     }
                     for activity in activities
                 ],
@@ -587,6 +599,15 @@ def generate_trip(
                 day_data["activities"],
                 start=1,
             ):
+                # === 保存 Activity：同时保存高德验证后的真实地点 ===
+                # 流程：AI 活动 → verified_place → 拆出 POI 数据 → Activity → 事务提交
+                verified_place = activity_data.get("verified_place")
+
+                if verified_place is None:
+                    raise ValueError(
+                        "Activity is missing verified place data"
+                    )
+
                 activity = models.Activity(
                     trip_day_id=trip_day.id,
                     name=activity_data["name"],
@@ -596,6 +617,12 @@ def generate_trip(
                     estimated_cost=activity_data["estimated_cost"],
                     description=activity_data["description"],
                     order=index,
+                    place_provider="amap",
+                    place_provider_id=verified_place.get("amap_id"),
+                    verified_name=verified_place.get("name"),
+                    verified_address=verified_place.get("address"),
+                    latitude=verified_place.get("latitude"),
+                    longitude=verified_place.get("longitude"),
                 )
 
                 db.add(activity)
