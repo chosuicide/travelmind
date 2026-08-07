@@ -1,0 +1,7 @@
+# === 不允许提交到 Git 的本地/敏感文件 ===
+
+.env
+.venv/
+__pycache__/
+*.pyc
+travelmind.db
