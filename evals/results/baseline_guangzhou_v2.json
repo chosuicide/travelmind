@@ -1,0 +1,382 @@
+{
+  "evaluation_version": "itinerary-quality-v2",
+  "model": "deepseek-v4-flash",
+  "prompt_version": "itinerary-v1-pre-optimization",
+  "results": [
+    {
+      "case_id": "guangzhou_culture_balanced",
+      "status": "completed",
+      "score": 100.0,
+      "passed_all_checks": true,
+      "checks": {
+        "correct_day_count": {
+          "passed": true,
+          "detail": "expected 3, got 3"
+        },
+        "sequential_day_numbers": {
+          "passed": true,
+          "detail": "expected [1, 2, 3], got [1, 2, 3]"
+        },
+        "activities_present_every_day": {
+          "passed": true,
+          "detail": "activity counts by day: [6, 6, 4]"
+        },
+        "valid_time_ranges": {
+          "passed": true,
+          "detail": "every activity must use HH:MM with start before end"
+        },
+        "no_time_overlap": {
+          "passed": true,
+          "detail": "activities within each day must not overlap"
+        },
+        "non_negative_numeric_costs": {
+          "passed": true,
+          "detail": "every estimated_cost must be a non-negative number"
+        },
+        "activity_cost_within_trip_budget": {
+          "passed": true,
+          "detail": "activity cost 1340.0, trip budget 5000.0"
+        },
+        "all_places_verified": {
+          "passed": true,
+          "detail": "every activity must contain AMap verified_place data"
+        }
+      },
+      "quality_signals": {
+        "pace_density_matches": {
+          "passed": false,
+          "detail": "pace balanced, expected activities/day (2, 5), got [6, 6, 4]"
+        },
+        "reasonable_transfer_distances": {
+          "passed": true,
+          "detail": "heuristic limit 25.0 km, max straight-line transfer 13.39 km, missing coordinates 0"
+        }
+      },
+      "metrics": {
+        "expected_days": 3,
+        "actual_days": 3,
+        "activity_counts": [
+          6,
+          6,
+          4
+        ],
+        "total_activity_cost": 1340.0,
+        "activity_budget_utilization": 0.268,
+        "daily_straight_line_km": [
+          9.55,
+          11.38,
+          21.62
+        ],
+        "max_transfer_straight_line_km": 13.39,
+        "missing_coordinate_count": 0
+      },
+      "manual_review": {
+        "interest_alignment": 4,
+        "route_coherence": 2,
+        "description_quality": 4,
+        "review_scale": "0-5",
+        "review_notes": [
+          "历史文化、岭南建筑和本地美食均有覆盖。",
+          "balanced 节奏前两天各 6 个活动，安排偏密。",
+          "广州圣心大教堂与石室圣心大教堂解析为同一 AMap POI，存在重复。",
+          "第三天跨番禺、海珠、越秀，路线跨度较大。",
+          "点都德（长提店）被高德第一结果匹配成昌岗店，需改进 POI 匹配。"
+        ]
+      },
+      "itinerary": {
+        "days": [
+          {
+            "day_number": 1,
+            "summary": "探索广州老城历史与建筑，品味地道美食",
+            "activities": [
+              {
+                "name": "陈家祠",
+                "location": "广州市荔湾区中山七路恩龙里34号",
+                "start_time": "09:00",
+                "end_time": "11:00",
+                "estimated_cost": 40.0,
+                "description": "参观岭南建筑艺术的典范，欣赏精美的木雕、石雕和陶塑。",
+                "verified_place": {
+                  "amap_id": "BV10015239",
+                  "name": "陈家祠(地铁站)",
+                  "address": "1号线;8号线",
+                  "city": "广州市",
+                  "district": "荔湾区",
+                  "latitude": 23.125727,
+                  "longitude": 113.246439
+                }
+              },
+              {
+                "name": "西关大屋",
+                "location": "广州市荔湾区逢源北街84号",
+                "start_time": "11:15",
+                "end_time": "12:15",
+                "estimated_cost": 20.0,
+                "description": "漫步西关，参观典型西关大屋，感受传统民居与历史韵味。",
+                "verified_place": {
+                  "amap_id": "B00141OK6G",
+                  "name": "西关大屋",
+                  "address": "逢源北街82号",
+                  "city": "广州市",
+                  "district": "荔湾区",
+                  "latitude": 23.119664,
+                  "longitude": 113.235782
+                }
+              },
+              {
+                "name": "上下九步行街",
+                "location": "广州市荔湾区上下九步行街",
+                "start_time": "12:30",
+                "end_time": "14:00",
+                "estimated_cost": 120.0,
+                "description": "品尝地道小吃如肠粉、牛杂，体验骑楼建筑下的市井生活。",
+                "verified_place": {
+                  "amap_id": "B0FFGFTXT9",
+                  "name": "上下九商业步行街",
+                  "address": "上下九步行街与德星路交叉口西130米",
+                  "city": "广州市",
+                  "district": "荔湾区",
+                  "latitude": 23.11467,
+                  "longitude": 113.24794
+                }
+              },
+              {
+                "name": "广州圣心大教堂",
+                "location": "广州市越秀区一德路旧部前56号",
+                "start_time": "14:30",
+                "end_time": "16:00",
+                "estimated_cost": 0.0,
+                "description": "参观哥特式建筑风格的教堂，感受中西文化交融。",
+                "verified_place": {
+                  "amap_id": "B00140UHIZ",
+                  "name": "广州圣心大教堂",
+                  "address": "一德路旧部前56号",
+                  "city": "广州市",
+                  "district": "越秀区",
+                  "latitude": 23.114589,
+                  "longitude": 113.260262
+                }
+              },
+              {
+                "name": "沙面岛",
+                "location": "广州市荔湾区沙面南街",
+                "start_time": "16:30",
+                "end_time": "18:30",
+                "estimated_cost": 0.0,
+                "description": "漫步欧洲风情建筑群，欣赏历史建筑，拍照留念。",
+                "verified_place": {
+                  "amap_id": "B00140NZ25",
+                  "name": "沙面岛",
+                  "address": "荔湾区",
+                  "city": "广州市",
+                  "district": "荔湾区",
+                  "latitude": 23.10781,
+                  "longitude": 113.24445
+                }
+              },
+              {
+                "name": "点都德（长提店）",
+                "location": "广州市荔湾区长堤大马路318号",
+                "start_time": "19:00",
+                "end_time": "20:30",
+                "estimated_cost": 200.0,
+                "description": "品尝广式点心，如虾饺、凤爪，体验传统茶楼文化。",
+                "verified_place": {
+                  "amap_id": "B0J25ROBXS",
+                  "name": "点都德(昌岗店)",
+                  "address": "昌岗中路238号达镖国际中心二层(步梯3楼电梯2楼)地铁2号线和8号线昌岗站E口方向第一个左转出口",
+                  "city": "广州市",
+                  "district": "海珠区",
+                  "latitude": 23.089536,
+                  "longitude": 113.276536
+                }
+              }
+            ]
+          },
+          {
+            "day_number": 2,
+            "summary": "感受广州城市中轴线与现代建筑，登高俯瞰城市",
+            "activities": [
+              {
+                "name": "越秀公园",
+                "location": "广州市越秀区解放北路988号",
+                "start_time": "09:00",
+                "end_time": "11:00",
+                "estimated_cost": 0.0,
+                "description": "参观五羊石像和镇海楼，了解广州历史，感受城市绿肺。",
+                "verified_place": {
+                  "amap_id": "B00140BNNF",
+                  "name": "越秀公园",
+                  "address": "解放北路988号",
+                  "city": "广州市",
+                  "district": "越秀区",
+                  "latitude": 23.140096,
+                  "longitude": 113.265561
+                }
+              },
+              {
+                "name": "中山纪念堂",
+                "location": "广州市越秀区东风中路259号",
+                "start_time": "11:30",
+                "end_time": "12:30",
+                "estimated_cost": 40.0,
+                "description": "参观纪念孙中山先生的宏伟建筑，欣赏八角形宫殿式设计。",
+                "verified_place": {
+                  "amap_id": "B00140UFHC",
+                  "name": "中山纪念堂",
+                  "address": "东风中路299号(纪念堂地铁站C口步行130米)",
+                  "city": "广州市",
+                  "district": "越秀区",
+                  "latitude": 23.13286,
+                  "longitude": 113.264692
+                }
+              },
+              {
+                "name": "北京路步行街",
+                "location": "广州市越秀区北京路",
+                "start_time": "12:45",
+                "end_time": "14:15",
+                "estimated_cost": 100.0,
+                "description": "在千年古道遗址上品尝美食，感受广州商业中心的热闹。",
+                "verified_place": {
+                  "amap_id": "B00141RH20",
+                  "name": "北京路步行街",
+                  "address": "北京路(地铁1,2号线公园前站E出口步行170米)",
+                  "city": "广州市",
+                  "district": "越秀区",
+                  "latitude": 23.120946,
+                  "longitude": 113.267679
+                }
+              },
+              {
+                "name": "石室圣心大教堂",
+                "location": "广州市越秀区一德路旧部前56号",
+                "start_time": "14:30",
+                "end_time": "15:30",
+                "estimated_cost": 0.0,
+                "description": "继续参观教堂的细节，或参加弥撒（如有）。",
+                "verified_place": {
+                  "amap_id": "B00140UHIZ",
+                  "name": "广州圣心大教堂",
+                  "address": "一德路旧部前56号",
+                  "city": "广州市",
+                  "district": "越秀区",
+                  "latitude": 23.114589,
+                  "longitude": 113.260262
+                }
+              },
+              {
+                "name": "花城广场",
+                "location": "广州市天河区花城大道89号",
+                "start_time": "16:00",
+                "end_time": "17:30",
+                "estimated_cost": 0.0,
+                "description": "漫步城市新中轴线，欣赏广州塔、东塔西塔等现代建筑。",
+                "verified_place": {
+                  "amap_id": "B00140WGV9",
+                  "name": "花城广场",
+                  "address": "珠江新城CBD中心区",
+                  "city": "广州市",
+                  "district": "天河区",
+                  "latitude": 23.120498,
+                  "longitude": 113.324593
+                }
+              },
+              {
+                "name": "广州塔",
+                "location": "广州市海珠区阅江西路222号",
+                "start_time": "18:00",
+                "end_time": "20:00",
+                "estimated_cost": 400.0,
+                "description": "登塔俯瞰全城夜景，体验摩天轮或速降，欣赏珠江华灯。",
+                "verified_place": {
+                  "amap_id": "B00140WBI1",
+                  "name": "广州塔",
+                  "address": "阅江西路222号",
+                  "city": "广州市",
+                  "district": "海珠区",
+                  "latitude": 23.106428,
+                  "longitude": 113.324521
+                }
+              }
+            ]
+          },
+          {
+            "day_number": 3,
+            "summary": "体验岭南水乡风情，品尝特色美食",
+            "activities": [
+              {
+                "name": "岭南印象园",
+                "location": "广州市番禺区大学城外环西路",
+                "start_time": "09:30",
+                "end_time": "12:00",
+                "estimated_cost": 120.0,
+                "description": "还原岭南古镇风貌，欣赏传统建筑和民间表演。",
+                "verified_place": {
+                  "amap_id": "B00140W71L",
+                  "name": "岭南印象园",
+                  "address": "大学城外环西路",
+                  "city": "广州市",
+                  "district": "番禺区",
+                  "latitude": 23.036038,
+                  "longitude": 113.406209
+                }
+              },
+              {
+                "name": "黄埔古港",
+                "location": "广州市海珠区黄埔村",
+                "start_time": "12:30",
+                "end_time": "14:00",
+                "estimated_cost": 80.0,
+                "description": "漫步古港，品尝姜撞奶，了解海上丝绸之路历史。",
+                "verified_place": {
+                  "amap_id": "B00140W60R",
+                  "name": "黄埔古港",
+                  "address": "石基村石基路(地铁4,8号线万胜围站A出口步行1.7公里)",
+                  "city": "广州市",
+                  "district": "海珠区",
+                  "latitude": 23.088989,
+                  "longitude": 113.394152
+                }
+              },
+              {
+                "name": "南越王博物院",
+                "location": "广州市越秀区解放北路867号",
+                "start_time": "14:30",
+                "end_time": "16:30",
+                "estimated_cost": 20.0,
+                "description": "参观南越王墓遗址，了解西汉南越国历史。",
+                "verified_place": {
+                  "amap_id": "B00140USZS",
+                  "name": "南越王博物院(王宫展区)",
+                  "address": "中山四路316号",
+                  "city": "广州市",
+                  "district": "越秀区",
+                  "latitude": 23.126878,
+                  "longitude": 113.269853
+                }
+              },
+              {
+                "name": "珠江夜游",
+                "location": "广州市天河区海心沙码头",
+                "start_time": "19:00",
+                "end_time": "21:00",
+                "estimated_cost": 200.0,
+                "description": "乘船夜游珠江，观赏两岸璀璨灯光与城市地标。",
+                "verified_place": {
+                  "amap_id": "B0FFFGVS2M",
+                  "name": "珠江夜游(大沙头码头)",
+                  "address": "沿江东路466号大沙头游船码头内",
+                  "city": "广州市",
+                  "district": "越秀区",
+                  "latitude": 23.112517,
+                  "longitude": 113.284844
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,685 @@
+{
+  "evaluation_version": "itinerary-quality-v2",
+  "model": "deepseek-v4-flash",
+  "prompt_version": "itinerary-v4-tool-calling-agent",
+  "results": [
+    {
+      "case_id": "guangzhou_culture_balanced",
+      "status": "completed",
+      "score": 100.0,
+      "passed_all_checks": true,
+      "checks": {
+        "correct_day_count": {
+          "passed": true,
+          "detail": "expected 3, got 3"
+        },
+        "sequential_day_numbers": {
+          "passed": true,
+          "detail": "expected [1, 2, 3], got [1, 2, 3]"
+        },
+        "activities_present_every_day": {
+          "passed": true,
+          "detail": "activity counts by day: [4, 3, 1]"
+        },
+        "valid_time_ranges": {
+          "passed": true,
+          "detail": "every activity must use HH:MM with start before end"
+        },
+        "no_time_overlap": {
+          "passed": true,
+          "detail": "activities within each day must not overlap"
+        },
+        "non_negative_numeric_costs": {
+          "passed": true,
+          "detail": "every estimated_cost must be a non-negative number"
+        },
+        "activity_cost_within_trip_budget": {
+          "passed": true,
+          "detail": "activity cost 722.0, trip budget 5000.0"
+        },
+        "all_places_verified": {
+          "passed": true,
+          "detail": "every activity must contain AMap verified_place data"
+        }
+      },
+      "quality_signals": {
+        "pace_density_matches": {
+          "passed": false,
+          "detail": "pace balanced, expected activities/day (2, 5), got [4, 3, 1]"
+        },
+        "reasonable_transfer_distances": {
+          "passed": true,
+          "detail": "heuristic limit 25.0 km, max straight-line transfer 2.2 km, missing coordinates 0"
+        },
+        "unique_verified_places": {
+          "passed": true,
+          "detail": "no repeated AMap POIs"
+        }
+      },
+      "metrics": {
+        "expected_days": 3,
+        "actual_days": 3,
+        "activity_counts": [
+          4,
+          3,
+          1
+        ],
+        "total_activity_cost": 722.0,
+        "activity_budget_utilization": 0.1444,
+        "duplicate_verified_places": [],
+        "daily_straight_line_km": [
+          3.07,
+          2.81,
+          0
+        ],
+        "max_transfer_straight_line_km": 2.2,
+        "missing_coordinate_count": 0
+      },
+      "manual_review": {
+        "interest_alignment": null,
+        "route_coherence": null,
+        "description_quality": null,
+        "review_scale": "0-5"
+      },
+      "agent_trace": [
+        {
+          "tool_name": "search_places",
+          "arguments": {
+            "keywords": "陈家祠",
+            "district": "广州",
+            "category": "attraction",
+            "limit": 3
+          },
+          "candidate_count": 3
+        },
+        {
+          "tool_name": "search_places",
+          "arguments": {
+            "keywords": "沙面",
+            "district": "广州",
+            "category": "attraction",
+            "limit": 3
+          },
+          "candidate_count": 3
+        },
+        {
+          "tool_name": "search_places",
+          "arguments": {
+            "keywords": "越秀公园",
+            "district": "广州",
+            "category": "attraction",
+            "limit": 3
+          },
+          "candidate_count": 3
+        },
+        {
+          "tool_name": "search_places",
+          "arguments": {
+            "keywords": "永庆坊",
+            "district": "广州",
+            "category": "attraction",
+            "limit": 3
+          },
+          "candidate_count": 3
+        },
+        {
+          "tool_name": "search_places",
+          "arguments": {
+            "keywords": "广州塔",
+            "district": "广州",
+            "category": "attraction",
+            "limit": 3
+          },
+          "candidate_count": 3
+        },
+        {
+          "tool_name": "search_places",
+          "arguments": {
+            "category": "attraction",
+            "district": "荔湾区",
+            "keywords": "陈家祠",
+            "limit": 3
+          },
+          "candidate_count": 3
+        },
+        {
+          "tool_name": "search_places",
+          "arguments": {
+            "category": "attraction",
+            "district": "荔湾区",
+            "keywords": "永庆坊 西关",
+            "limit": 3
+          },
+          "candidate_count": 3
+        },
+        {
+          "tool_name": "search_places",
+          "arguments": {
+            "category": "attraction",
+            "district": "越秀区",
+            "keywords": "中山纪念堂",
+            "limit": 3
+          },
+          "candidate_count": 3
+        },
+        {
+          "tool_name": "search_places",
+          "arguments": {
+            "category": "restaurant",
+            "district": "广州",
+            "keywords": "广州早茶 点心",
+            "limit": 3
+          },
+          "candidate_count": 3
+        },
+        {
+          "tool_name": "search_places",
+          "arguments": {
+            "category": "restaurant",
+            "district": "越秀区",
+            "keywords": "老字号 粤菜",
+            "limit": 3
+          },
+          "candidate_count": 3
+        },
+        {
+          "tool_name": "search_places",
+          "arguments": {
+            "category": "restaurant",
+            "district": "荔湾区",
+            "keywords": "西关美食 粤菜",
+            "limit": 3
+          },
+          "candidate_count": 3
+        },
+        {
+          "tool_name": "search_places",
+          "arguments": {
+            "category": "attraction",
+            "district": "海珠区",
+            "keywords": "黄埔古港",
+            "limit": 2
+          },
+          "candidate_count": 2
+        },
+        {
+          "tool_name": "get_place_details",
+          "arguments": {
+            "place_provider_id": "B00140H88E"
+          },
+          "candidate_count": 1
+        },
+        {
+          "tool_name": "get_place_details",
+          "arguments": {
+            "place_provider_id": "B0IUPDSJHU"
+          },
+          "candidate_count": 1
+        },
+        {
+          "tool_name": "get_place_details",
+          "arguments": {
+            "place_provider_id": "B00140UFHC"
+          },
+          "candidate_count": 1
+        },
+        {
+          "tool_name": "get_place_details",
+          "arguments": {
+            "place_provider_id": "B0HAN6JOQN"
+          },
+          "candidate_count": 1
+        },
+        {
+          "tool_name": "estimate_route",
+          "arguments": {
+            "origin_place_id": "B00140H88E",
+            "destination_place_id": "B0IUPDSJHU",
+            "mode": "transit"
+          },
+          "candidate_count": 0
+        },
+        {
+          "tool_name": "estimate_route",
+          "arguments": {
+            "origin_place_id": "B0IUPDSJHU",
+            "destination_place_id": "B0FFFAJYVI",
+            "mode": "transit"
+          },
+          "candidate_count": 0
+        },
+        {
+          "tool_name": "estimate_route",
+          "arguments": {
+            "origin_place_id": "B00140W60R",
+            "destination_place_id": "B00140WBI1",
+            "mode": "driving"
+          },
+          "candidate_count": 0
+        },
+        {
+          "tool_name": "estimate_route",
+          "arguments": {
+            "origin_place_id": "B00140UFHC",
+            "destination_place_id": "B00140T14D",
+            "mode": "walking"
+          },
+          "candidate_count": 0
+        },
+        {
+          "tool_name": "check_itinerary",
+          "arguments": {
+            "draft": {
+              "days": [
+                {
+                  "day_number": 1,
+                  "summary": "荔湾岭南建筑与西关美食之旅",
+                  "activities": [
+                    {
+                      "place_provider_id": "B0HAN6JOQN",
+                      "name": "点都德(大茶楼店)",
+                      "location": "龙津中路587-589号",
+                      "start_time": "09:00",
+                      "end_time": "10:30",
+                      "estimated_cost": 172,
+                      "description": "地道广式早茶，享受点心与茶"
+                    },
+                    {
+                      "place_provider_id": "B00140H88E",
+                      "name": "陈家祠堂",
+                      "location": "中山七路恩龙里34号",
+                      "start_time": "11:00",
+                      "end_time": "13:00",
+                      "estimated_cost": 60,
+                      "description": "岭南建筑艺术瑰宝，国家级景点"
+                    },
+                    {
+                      "place_provider_id": "B0IUPDSJHU",
+                      "name": "永庆坊",
+                      "location": "恩宁路99号",
+                      "start_time": "14:00",
+                      "end_time": "16:00",
+                      "estimated_cost": 0,
+                      "description": "西关风情历史街区"
+                    },
+                    {
+                      "place_provider_id": "B0FFFAJYVI",
+                      "name": "沙面岛",
+                      "location": "沙面南街52号",
+                      "start_time": "16:30",
+                      "end_time": "19:00",
+                      "estimated_cost": 0,
+                      "description": "欧陆风情租界历史街区，漫步拍照"
+                    }
+                  ]
+                },
+                {
+                  "day_number": 2,
+                  "summary": "越秀历史地标与老城味道",
+                  "activities": [
+                    {
+                      "place_provider_id": "B00140UFHC",
+                      "name": "中山纪念堂",
+                      "location": "东风中路299号",
+                      "start_time": "09:30",
+                      "end_time": "11:30",
+                      "estimated_cost": 40,
+                      "description": "纪念孙中山的宏伟建筑"
+                    },
+                    {
+                      "place_provider_id": "B00140T14D",
+                      "name": "五羊雕像",
+                      "location": "越秀公园内木壳岗",
+                      "start_time": "12:00",
+                      "end_time": "14:00",
+                      "estimated_cost": 0,
+                      "description": "广州城标，越秀公园内"
+                    },
+                    {
+                      "place_provider_id": "B0K3O5XPR2",
+                      "name": "荣华楼",
+                      "location": "龙津东路714号",
+                      "start_time": "14:30",
+                      "end_time": "16:00",
+                      "estimated_cost": 150,
+                      "description": "老字号粤菜点心"
+                    }
+                  ]
+                },
+                {
+                  "day_number": 3,
+                  "summary": "海珠古今交融与现代地标",
+                  "activities": [
+                    {
+                      "place_provider_id": "B00140W60R",
+                      "name": "黄埔古港",
+                      "location": "石基村石基路",
+                      "start_time": "09:30",
+                      "end_time": "12:00",
+                      "estimated_cost": 0,
+                      "description": "古代海上丝绸之路重要港口"
+                    },
+                    {
+                      "place_provider_id": "B00140WBI1",
+                      "name": "广州塔",
+                      "location": "阅江西路222号",
+                      "start_time": "14:00",
+                      "end_time": "18:00",
+                      "estimated_cost": 300,
+                      "description": "广州地标观光塔"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "candidate_count": 0
+        },
+        {
+          "tool_name": "check_itinerary",
+          "arguments": {
+            "draft": {
+              "days": [
+                {
+                  "day_number": 1,
+                  "summary": "荔湾岭南建筑与西关美食之旅",
+                  "activities": [
+                    {
+                      "place_provider_id": "B0HAN6JOQN",
+                      "name": "点都德(大茶楼店)",
+                      "location": "龙津中路587-589号",
+                      "start_time": "09:00",
+                      "end_time": "10:30",
+                      "estimated_cost": 172,
+                      "description": "地道广式早茶"
+                    },
+                    {
+                      "place_provider_id": "B00140H88E",
+                      "name": "陈家祠堂",
+                      "location": "中山七路恩龙里34号",
+                      "start_time": "11:00",
+                      "end_time": "13:00",
+                      "estimated_cost": 60,
+                      "description": "岭南建筑艺术瑰宝"
+                    },
+                    {
+                      "place_provider_id": "B0IUPDSJHU",
+                      "name": "永庆坊",
+                      "location": "恩宁路99号",
+                      "start_time": "14:00",
+                      "end_time": "16:00",
+                      "estimated_cost": 0,
+                      "description": "西关风情历史街区"
+                    }
+                  ]
+                },
+                {
+                  "day_number": 2,
+                  "summary": "越秀历史地标与老城味道",
+                  "activities": [
+                    {
+                      "place_provider_id": "B00140UFHC",
+                      "name": "中山纪念堂",
+                      "location": "东风中路299号",
+                      "start_time": "09:30",
+                      "end_time": "11:30",
+                      "estimated_cost": 40,
+                      "description": "纪念孙中山的宏伟建筑"
+                    },
+                    {
+                      "place_provider_id": "B00140T14D",
+                      "name": "五羊雕像",
+                      "location": "越秀公园内木壳岗",
+                      "start_time": "12:00",
+                      "end_time": "14:00",
+                      "estimated_cost": 0,
+                      "description": "广州城标"
+                    },
+                    {
+                      "place_provider_id": "B0K3O5XPR2",
+                      "name": "荣华楼",
+                      "location": "龙津东路714号",
+                      "start_time": "15:00",
+                      "end_time": "16:30",
+                      "estimated_cost": 150,
+                      "description": "老字号粤菜点心"
+                    }
+                  ]
+                },
+                {
+                  "day_number": 3,
+                  "summary": "海珠海丝古港与现代地标",
+                  "activities": [
+                    {
+                      "place_provider_id": "B00140W60R",
+                      "name": "黄埔古港",
+                      "location": "石基村石基路",
+                      "start_time": "09:30",
+                      "end_time": "12:00",
+                      "estimated_cost": 0,
+                      "description": "海上丝绸之路古港"
+                    },
+                    {
+                      "place_provider_id": "B00140WBI1",
+                      "name": "广州塔",
+                      "location": "阅江西路222号",
+                      "start_time": "14:00",
+                      "end_time": "18:00",
+                      "estimated_cost": 300,
+                      "description": "广州地标观光塔"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "candidate_count": 0
+        }
+      ],
+      "agent_quality_trace": [
+        {
+          "stage": "initial",
+          "issues": [
+            "Day 3 has 1 activities; balanced pace requires 2 to 5."
+          ]
+        },
+        {
+          "stage": "after_repair",
+          "issues": [
+            "Day 3 transfer from \"黄埔古港\" to \"广州塔\" is about 7.4 km straight-line. Prefer a nearer candidate or reorder."
+          ]
+        }
+      ],
+      "itinerary": {
+        "days": [
+          {
+            "day_number": 1,
+            "summary": "荔湾岭南建筑与西关美食之旅",
+            "activities": [
+              {
+                "place_provider_id": "B0HAN6JOQN",
+                "name": "点都德(大茶楼店)",
+                "location": "龙津中路587-589号(近地铁1/8号线陈家祠站B口中国银行右转20米)",
+                "start_time": "09:00",
+                "end_time": "10:30",
+                "estimated_cost": 172.0,
+                "description": "地道广式早茶，享受虾饺等点心",
+                "verified_place": {
+                  "amap_id": "B0HAN6JOQN",
+                  "name": "点都德(大茶楼店)",
+                  "address": "龙津中路587-589号(近地铁1/8号线陈家祠站B口中国银行右转20米)",
+                  "city": "广州市",
+                  "district": "荔湾区",
+                  "latitude": 23.123471,
+                  "longitude": 113.246339,
+                  "parent_id": "",
+                  "selection_role": "primary",
+                  "match_score": 0.0
+                }
+              },
+              {
+                "place_provider_id": "B00140H88E",
+                "name": "陈家祠堂",
+                "location": "中山七路恩龙里34号(地铁1,8号线陈家祠站D出口步行110米)",
+                "start_time": "11:00",
+                "end_time": "13:00",
+                "estimated_cost": 60.0,
+                "description": "岭南建筑艺术瑰宝，4A景区",
+                "verified_place": {
+                  "amap_id": "B00140H88E",
+                  "name": "陈家祠堂",
+                  "address": "中山七路恩龙里34号(地铁1,8号线陈家祠站D出口步行110米)",
+                  "city": "广州市",
+                  "district": "荔湾区",
+                  "latitude": 23.126692,
+                  "longitude": 113.245158,
+                  "parent_id": "",
+                  "selection_role": "primary",
+                  "match_score": 140.71
+                }
+              },
+              {
+                "place_provider_id": "B0IUPDSJHU",
+                "name": "永庆坊",
+                "location": "恩宁路99号",
+                "start_time": "14:00",
+                "end_time": "16:00",
+                "estimated_cost": 0.0,
+                "description": "西关风情历史街区，岭南骑楼建筑",
+                "verified_place": {
+                  "amap_id": "B0IUPDSJHU",
+                  "name": "永庆坊",
+                  "address": "恩宁路99号",
+                  "city": "广州市",
+                  "district": "荔湾区",
+                  "latitude": 23.114821,
+                  "longitude": 113.237495,
+                  "parent_id": "",
+                  "selection_role": "primary",
+                  "match_score": 215.0
+                }
+              },
+              {
+                "place_provider_id": "B0FFFAJYVI",
+                "name": "沙面岛",
+                "location": "沙面南街52号",
+                "start_time": "16:30",
+                "end_time": "18:30",
+                "estimated_cost": 0.0,
+                "description": "欧陆风情租界历史街区，漫步拍照",
+                "verified_place": {
+                  "amap_id": "B0FFFAJYVI",
+                  "name": "沙面岛",
+                  "address": "沙面南街52号",
+                  "city": "广州市",
+                  "district": "荔湾区",
+                  "latitude": 23.106802,
+                  "longitude": 113.244707,
+                  "parent_id": "",
+                  "selection_role": "primary",
+                  "match_score": 15.0
+                }
+              }
+            ]
+          },
+          {
+            "day_number": 2,
+            "summary": "越秀历史地标与老城味道",
+            "activities": [
+              {
+                "place_provider_id": "B00140UFHC",
+                "name": "中山纪念堂",
+                "location": "东风中路299号(纪念堂地铁站C口步行130米)",
+                "start_time": "09:30",
+                "end_time": "11:30",
+                "estimated_cost": 40.0,
+                "description": "纪念孙中山的宏伟地标建筑",
+                "verified_place": {
+                  "amap_id": "B00140UFHC",
+                  "name": "中山纪念堂",
+                  "address": "东风中路299号(纪念堂地铁站C口步行130米)",
+                  "city": "广州市",
+                  "district": "越秀区",
+                  "latitude": 23.13286,
+                  "longitude": 113.264692,
+                  "parent_id": "",
+                  "selection_role": "primary",
+                  "match_score": 215.0
+                }
+              },
+              {
+                "place_provider_id": "B00140T14D",
+                "name": "五羊雕像",
+                "location": "解放北路988号越秀公园内木壳岗上",
+                "start_time": "12:00",
+                "end_time": "14:00",
+                "estimated_cost": 0.0,
+                "description": "广州城标五羊雕塑",
+                "verified_place": {
+                  "amap_id": "B00140T14D",
+                  "name": "五羊雕像",
+                  "address": "解放北路988号越秀公园内木壳岗上",
+                  "city": "广州市",
+                  "district": "越秀区",
+                  "latitude": 23.138021,
+                  "longitude": 113.262852,
+                  "parent_id": "B00140BNNF",
+                  "selection_role": "primary",
+                  "match_score": 15.0
+                }
+              },
+              {
+                "place_provider_id": "B0K3O5XPR2",
+                "name": "荣华楼",
+                "location": "龙津东路714号",
+                "start_time": "15:00",
+                "end_time": "16:30",
+                "estimated_cost": 150.0,
+                "description": "老字号粤菜点心酒楼",
+                "verified_place": {
+                  "amap_id": "B0K3O5XPR2",
+                  "name": "荣华楼",
+                  "address": "龙津东路714号",
+                  "city": "广州市",
+                  "district": "荔湾区",
+                  "latitude": 23.121912,
+                  "longitude": 113.250304,
+                  "parent_id": "",
+                  "selection_role": "primary",
+                  "match_score": 0.0
+                }
+              }
+            ]
+          },
+          {
+            "day_number": 3,
+            "summary": "海珠现代地标之旅",
+            "activities": [
+              {
+                "place_provider_id": "B00140WBI1",
+                "name": "广州塔",
+                "location": "阅江西路222号",
+                "start_time": "09:30",
+                "end_time": "12:00",
+                "estimated_cost": 300.0,
+                "description": "广州地标观光塔，俯瞰城市全景",
+                "verified_place": {
+                  "amap_id": "B00140WBI1",
+                  "name": "广州塔",
+                  "address": "阅江西路222号",
+                  "city": "广州市",
+                  "district": "海珠区",
+                  "latitude": 23.106428,
+                  "longitude": 113.324521,
+                  "parent_id": "B0JRSRL01Q",
+                  "selection_role": "primary",
+                  "match_score": 15.0
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

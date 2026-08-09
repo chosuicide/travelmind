@@ -1,0 +1,98 @@
+[
+  {
+    "case_id": "guangzhou_culture_balanced",
+    "tags": ["smoke", "days:3", "pace:balanced", "culture"],
+    "destination": "广州",
+    "start_date": "2026-10-01",
+    "end_date": "2026-10-03",
+    "budget": 5000,
+    "people": 2,
+    "interests": ["历史文化", "岭南建筑", "本地美食"],
+    "pace": "balanced",
+    "notes": "尽量减少排队和重复路线"
+  },
+  {
+    "case_id": "hangzhou_solo_relaxed",
+    "tags": ["days:2", "pace:relaxed", "solo", "nature"],
+    "destination": "杭州",
+    "start_date": "2026-10-10",
+    "end_date": "2026-10-11",
+    "budget": 1600,
+    "people": 1,
+    "interests": ["自然风景", "传统文化"],
+    "pace": "relaxed",
+    "notes": "每天不要安排太多地点"
+  },
+  {
+    "case_id": "beijing_family",
+    "tags": ["days:4", "pace:balanced", "family", "museum"],
+    "destination": "北京",
+    "start_date": "2026-10-15",
+    "end_date": "2026-10-18",
+    "budget": 12000,
+    "people": 4,
+    "interests": ["亲子", "历史", "博物馆"],
+    "pace": "balanced",
+    "notes": "同行有两名儿童，避免连续高强度步行"
+  },
+  {
+    "case_id": "chengdu_senior_relaxed",
+    "tags": ["days:3", "pace:relaxed", "senior", "food"],
+    "destination": "成都",
+    "start_date": "2026-11-02",
+    "end_date": "2026-11-04",
+    "budget": 6000,
+    "people": 2,
+    "interests": ["休闲", "川菜", "传统文化"],
+    "pace": "relaxed",
+    "notes": "同行有老人，需要午休并减少长距离步行"
+  },
+  {
+    "case_id": "shanghai_low_budget_day_trip",
+    "tags": ["days:1", "pace:intensive", "solo", "low-budget"],
+    "destination": "上海",
+    "start_date": "2026-11-08",
+    "end_date": "2026-11-08",
+    "budget": 500,
+    "people": 1,
+    "interests": ["城市建筑", "摄影"],
+    "pace": "intensive",
+    "notes": "优先免费或低费用地点"
+  },
+  {
+    "case_id": "xian_history_intensive_max_days",
+    "tags": ["days:5", "pace:intensive", "max-days", "history"],
+    "destination": "西安",
+    "start_date": "2026-11-12",
+    "end_date": "2026-11-16",
+    "budget": 9000,
+    "people": 2,
+    "interests": ["历史遗迹", "博物馆", "陕西美食"],
+    "pace": "intensive",
+    "notes": "五天行程需要避免重复景点并按区域安排"
+  },
+  {
+    "case_id": "shenzhen_modern_balanced",
+    "tags": ["days:2", "pace:balanced", "modern", "architecture"],
+    "destination": "深圳",
+    "start_date": "2026-11-20",
+    "end_date": "2026-11-21",
+    "budget": 3000,
+    "people": 2,
+    "interests": ["现代建筑", "城市公园", "科技文化"],
+    "pace": "balanced",
+    "notes": "优先地铁可达地点，减少跨区折返"
+  },
+  {
+    "case_id": "nanjing_student_intensive_low_budget",
+    "tags": ["days:3", "pace:intensive", "solo", "low-budget"],
+    "destination": "南京",
+    "start_date": "2026-11-25",
+    "end_date": "2026-11-27",
+    "budget": 1200,
+    "people": 1,
+    "interests": ["近代历史", "大学校园", "城市摄影"],
+    "pace": "intensive",
+    "notes": "学生预算，优先免费景点和公共交通"
+  }
+]

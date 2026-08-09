@@ -1,0 +1,56 @@
+{
+  "baseline_id": "guangzhou_culture_balanced_v1",
+  "recorded_at": "2026-08-08",
+  "model": "deepseek-v4-flash",
+  "prompt_version": "itinerary-v1-pre-optimization",
+  "external_calls": {
+    "deepseek_generations": 1,
+    "amap_activities_verified": 13
+  },
+  "result": {
+    "case_id": "guangzhou_culture_balanced",
+    "status": "completed",
+    "score": 100.0,
+    "passed_all_checks": true,
+    "checks": {
+      "correct_day_count": {
+        "passed": true,
+        "detail": "expected 3, got 3"
+      },
+      "sequential_day_numbers": {
+        "passed": true,
+        "detail": "expected [1, 2, 3], got [1, 2, 3]"
+      },
+      "activities_present_every_day": {
+        "passed": true,
+        "detail": "activity counts by day: [4, 5, 4]"
+      },
+      "valid_time_ranges": {
+        "passed": true,
+        "detail": "every activity must use HH:MM with start before end"
+      },
+      "no_time_overlap": {
+        "passed": true,
+        "detail": "activities within each day must not overlap"
+      },
+      "non_negative_numeric_costs": {
+        "passed": true,
+        "detail": "every estimated_cost must be a non-negative number"
+      },
+      "activity_cost_within_trip_budget": {
+        "passed": true,
+        "detail": "activity cost 860.0, trip budget 5000.0"
+      },
+      "all_places_verified": {
+        "passed": true,
+        "detail": "every activity must contain AMap verified_place data"
+      }
+    },
+    "metrics": {
+      "expected_days": 3,
+      "actual_days": 3,
+      "activity_counts": [4, 5, 4],
+      "total_activity_cost": 860.0
+    }
+  }
+}
