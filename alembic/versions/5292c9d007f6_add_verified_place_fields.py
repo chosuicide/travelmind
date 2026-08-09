@@ -1,7 +1,7 @@
 """add verified place fields
 
 Revision ID: 5292c9d007f6
-Revises: 
+Revises: 1f6a2d4c8b90
 Create Date: 2026-08-07 18:40:36.557787
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '5292c9d007f6'
-down_revision: Union[str, Sequence[str], None] = None
+down_revision: Union[str, Sequence[str], None] = "1f6a2d4c8b90"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

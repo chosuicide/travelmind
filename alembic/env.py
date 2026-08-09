@@ -5,9 +5,14 @@ from sqlalchemy import pool
 
 from alembic import context
 
+from app.core.config import DATABASE_URL
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# 应用与迁移共用同一个 DATABASE_URL；双写百分号避免 ConfigParser 插值。
+config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -18,8 +23,8 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-from database import Base
-import models  # 必须加载模型，Base 才知道有哪些表
+from app.db.session import Base
+from app.db import models  # 必须加载模型，Base 才知道有哪些表
 
 target_metadata = Base.metadata
 # other values from the config, defined by the needs of env.py,
@@ -65,13 +70,17 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
 
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+    try:
+        with connectable.connect() as connection:
+            context.configure(
+                connection=connection,
+                target_metadata=target_metadata,
+            )
 
-        with context.begin_transaction():
-            context.run_migrations()
+            with context.begin_transaction():
+                context.run_migrations()
+    finally:
+        connectable.dispose()
 
 
 if context.is_offline_mode():
