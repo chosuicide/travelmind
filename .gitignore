@@ -26,6 +26,7 @@ htmlcov/
 frontend/node_modules/
 frontend/dist/
 frontend/.playwright-cli/
+.playwright-cli/
 
 # === 日志与本地工具文件 ===
 *.log

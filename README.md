@@ -4,9 +4,17 @@ TravelMind 是一个面向中国大陆旅行场景的 AI 行程规划后端。AP
 
 ## 项目预览
 
+### 登录页
+
+![TravelMind 登录页](frontend/output/playwright/travelmind-login.png)
+
 ### 桌面端
 
 ![TravelMind 桌面端行程工作台](frontend/output/playwright/travelmind-desktop.png)
+
+### Agent 生成过程
+
+![TravelMind Agent 生成进度](frontend/output/playwright/travelmind-generation-progress.png)
 
 ### 移动端
 
