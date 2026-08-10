@@ -4,6 +4,12 @@
 
 TravelMind 允许用户先选定目的地，再通过自然语言逐步补充日期、人数、预算和偏好。需求确认后，Agent 会查询真实地点、规划路线，并把结果保存为可以继续对话修改的行程。
 
+**[打开在线演示](https://travelmind-production-18d8.up.railway.app)**
+
+测试账号：`demo@travelmind.app`　密码：`TravelMind2026!`
+
+> 演示账号的数据由访客共享。为了控制开源展示成本，服务会自动休眠，并限制每个账号及全站的每日对话、生成次数；首次访问可能需要等待短暂冷启动。
+
 ![TravelMind 桌面端行程工作台](frontend/output/playwright/travelmind-desktop.png)
 
 > 当前版本面向中国大陆旅行场景，使用 DeepSeek 处理对话与规划，使用高德地图验证地点和路线。
@@ -94,7 +100,7 @@ LangGraph 检查点保存在本地 SQLite 文件中；每个 `GenerationRun` 都
 - 可恢复的后台生成任务与可视化进度
 - 通过聊天生成修改提案并应用新行程
 - 桌面端与移动端地图/对话布局
-- Alembic 数据库迁移和 143 项后端测试
+- Alembic 数据库迁移和 144 项后端测试
 
 ## 技术栈
 
@@ -226,7 +232,7 @@ pnpm build
 当前版本的本地验证结果：
 
 ```text
-Backend tests     143 passed
+Backend tests     144 passed
 Alembic check     no pending migration
 Frontend build    passed
 Browser flow      desktop and mobile passed
@@ -249,7 +255,7 @@ Browser flow      desktop and mobile passed
 
 ## 项目状态
 
-TravelMind 是用于学习和作品展示的个人项目，目前没有在线公共服务。代码可以在本地完整运行，但还没有按照生产系统配置 PostgreSQL、分布式任务队列、集中日志和监控。
+TravelMind 是用于学习和作品展示的个人项目，当前通过 Railway 提供限额在线演示。部署采用单容器与持久化 SQLite 卷，适合作品集访问；它没有按照正式生产系统配置 PostgreSQL、分布式任务队列、集中日志和监控。
 
 ## License
 

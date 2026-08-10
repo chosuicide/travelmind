@@ -1,10 +1,11 @@
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.conversations.agent import run_conversation_agent
-from app.conversations.agent.tools import stale_pending_previews
+from app.conversations.agent.tools import AgentToolContext, stale_pending_previews
 from app.conversations.extractor import (
     extract_message,
     generate_grounded_reply,
@@ -272,6 +273,14 @@ def _natural_requirement_turns(db: Session, conversation_id: int) -> int:
         for message in messages
         if (message.payload or {}).get("source") != "structured"
         and (message.payload or {}).get("action") is None
+    )
+
+
+def _requests_trip_preview(message: str) -> bool:
+    compact = "".join(message.split())
+    return "预览" in compact and any(
+        marker in compact
+        for marker in ("生成", "整理", "看看", "看一下", "确认", "卡片")
     )
 
 
@@ -545,6 +554,39 @@ def process_agent_message(
         update_conversation_usage(usage, {})
         db.commit()
         return False, False
+
+    # === 模块：预览工具兜底 ===
+    # 流程：字段完整 + 至少三轮 + 本轮有更新/明确要预览 → 模型漏调工具时补执行
+    should_prepare_preview = (
+        not generated_mode
+        and result.preview_payload is None
+        and result.generation_preview_id is None
+        and _natural_requirement_turns(db, conversation.id) >= 3
+        and not get_missing_fields(conversation.draft)
+        and (result.accepted or _requests_trip_preview(request.content))
+    )
+    if should_prepare_preview:
+        fallback_context = AgentToolContext(
+            db=db,
+            conversation=conversation,
+            history=recent_history,
+        )
+        fallback_context.execute(
+            "create_trip_preview",
+            {"use_defaults": False},
+            "backend-preview-fallback",
+        )
+        if fallback_context.preview_payload is not None:
+            result = replace(
+                result,
+                content="信息已经整理完整，请确认这份需求预览。",
+                accepted=True,
+                preview_payload=fallback_context.preview_payload,
+                tool_events=[
+                    *result.tool_events,
+                    *fallback_context.tool_events,
+                ],
+            )
 
     update_conversation_usage(usage, result.usage)
     user_message.payload = {

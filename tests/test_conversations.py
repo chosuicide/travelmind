@@ -680,6 +680,58 @@ class ConversationApiTests(unittest.TestCase):
         self.assertIsNotNone(confirmed_conversation["trip_id"])
         self.assertEqual(mock_extract.call_count, 2)
 
+    def test_backend_creates_preview_when_agent_only_claims_it_did(self):
+        conversation_id = self._create_conversation()
+        with self.TestingSessionLocal() as db:
+            conversation = db.get(models.Conversation, conversation_id)
+            conversation.draft = self._complete_patch()
+            db.add_all(
+                [
+                    models.ChatMessage(
+                        conversation_id=conversation_id,
+                        client_message_id=f"preview-fallback-turn-{index}",
+                        role="user",
+                        message_type="text",
+                        content="前序旅行需求",
+                        payload={"source": "agent", "accepted": True},
+                        created_at=datetime.now(timezone.utc),
+                    )
+                    for index in range(2)
+                ]
+            )
+            db.commit()
+
+        model_result = AgentRunResult(
+            content="需求预览卡片已经生成好了。",
+            accepted=False,
+            usage={"input_tokens": 3, "output_tokens": 2, "total_tokens": 5},
+            preview_payload=None,
+            generation_preview_id=None,
+            tool_events=[],
+        )
+        with patch(
+            "app.conversations.service.run_conversation_agent",
+            return_value=model_result,
+        ):
+            response = self.client.post(
+                f"/conversations/{conversation_id}/messages",
+                json={
+                    "client_message_id": "preview-fallback-request",
+                    "content": "信息完整了，请生成需求预览卡片。",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        conversation = response.json()["conversation"]
+        preview = conversation["messages"][-1]
+        self.assertEqual(preview["message_type"], "requirements")
+        self.assertEqual(preview["payload"]["kind"], "draft_preview")
+        self.assertEqual(preview["payload"]["status"], "pending")
+        self.assertEqual(
+            preview["content"],
+            "信息已经整理完整，请确认这份需求预览。",
+        )
+
     @patch("app.conversations.service.extract_message")
     def test_dismissing_draft_preview_keeps_updated_working_draft(
         self,

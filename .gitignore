@@ -31,5 +31,6 @@ frontend/.playwright-cli/
 # === 日志与本地工具文件 ===
 *.log
 .codex-tmp/
+output/
 .DS_Store
 Thumbs.db
