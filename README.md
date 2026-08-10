@@ -223,3 +223,7 @@ Browser flow      desktop and mobile passed
 ## 项目状态
 
 TravelMind 是用于学习和作品展示的个人项目，目前没有在线公共服务。代码可以在本地完整运行，但还没有按照生产系统配置 PostgreSQL、分布式任务队列、集中日志和监控。
+
+## License
+
+本项目使用 [MIT License](LICENSE)。
