@@ -1,16 +1,44 @@
 # TravelMind
 
-TravelMind 是一个面向中国大陆旅行场景的 AI 行程规划后端。API 负责认证、行程管理和任务入队，独立 Worker 调用模型与地图工具并持久化结果。
+一个把旅行对话变成可验证地图路线的个人全栈项目。
 
-## 项目预览
+TravelMind 允许用户先选定目的地，再通过自然语言逐步补充日期、人数、预算和偏好。需求确认后，Agent 会查询真实地点、规划路线，并把结果保存为可以继续对话修改的行程。
+
+![TravelMind 桌面端行程工作台](frontend/output/playwright/travelmind-desktop.png)
+
+> 当前版本面向中国大陆旅行场景，使用 DeepSeek 处理对话与规划，使用高德地图验证地点和路线。
+
+## 为什么做这个项目
+
+普通大模型可以很快写出一段旅行计划，但其中的地点可能不存在，路线也未必合理；生成结束后，用户通常还要重新描述全部需求才能修改。
+
+我想尝试另一种做法：让模型负责理解意图和选择工具，让后端负责权限、状态、数据约束和最终写入。这样生成结果不只是一段文本，而是一份经过地点验证、能够在地图上展示、还能继续调整的行程。
+
+这个项目也是我学习如何使用 AI 完成真实软件工程的过程。重点不只是接入模型 API，而是处理模型输出不稳定、长任务中断、工具调用、数据一致性和前后端状态同步这些实际问题。
+
+## 一次规划怎样完成
+
+```text
+选择省市 → 多轮对话 → 需求预览 → 用户确认
+        → Agent 调用地点与路线工具 → Worker 保存行程
+        → 地图展示 → 继续通过聊天修改
+```
+
+一个典型流程是：
+
+1. 用户先选择省份和城市，避免地点识别在对话中反复摇摆。
+2. Agent 通过多轮对话收集日期、人数、预算和偏好；没想好的字段可以使用合理默认值。
+3. 信息收敛后生成需求预览，用户确认前不会创建正式行程。
+4. 确认后，API 只负责创建后台任务，独立 Worker 执行模型和地图工具。
+5. 地点通过高德 POI 验证后，系统保存坐标、路线和每天的活动。
+6. 用户可以继续在原对话中提出修改，先查看修改提案，再决定是否应用。
+
+<details>
+<summary>查看更多界面</summary>
 
 ### 登录页
 
 ![TravelMind 登录页](frontend/output/playwright/travelmind-login.png)
-
-### 桌面端
-
-![TravelMind 桌面端行程工作台](frontend/output/playwright/travelmind-desktop.png)
 
 ### Agent 生成过程
 
@@ -23,123 +51,175 @@ TravelMind 是一个面向中国大陆旅行场景的 AI 行程规划后端。AP
   <img src="frontend/output/playwright/travelmind-mobile-map.png" alt="TravelMind 移动端地图界面" width="47%">
 </p>
 
-## Agent 架构
+</details>
 
-TravelMind 使用 LangChain 绑定 DeepSeek 工具，使用 LangGraph 显式编排会话和行程生成状态：
+## Agent 与系统边界
+
+TravelMind 使用 LangChain 描述工具，使用 LangGraph 编排对话与行程生成状态。Agent 可以判断下一步该追问、生成预览还是调用工具，但不能直接修改数据库。
 
 ```mermaid
 flowchart LR
     U[用户消息] --> C[会话 Agent]
     C --> P[需求预览]
-    C --> M[行程修改提案]
-    P --> G[生成任务]
-    G --> L[LangGraph 生成子图]
-    L --> A[高德地点与路线工具]
-    A --> V[结构与质量验证]
+    C --> M[修改提案]
+    P -->|用户确认| Q[生成任务]
+    Q --> W[后台 Worker]
+    W --> L[LangGraph 生成流程]
+    L --> T[高德地点与路线工具]
+    T --> V[结构与质量验证]
     V -->|需要修订| L
-    V -->|通过| D[(行程数据库)]
+    V -->|通过| D[(业务数据库)]
     M -->|用户确认| D
 ```
 
-- 会话 Agent 会根据当前状态动态选择需求工具或行程修改工具。
-- 修改先形成可审查提案，只有用户确认后才写入行程并重算路线。
-- 生成子图由 `model → tools → validate` 三类节点组成。
-- 每个 `GenerationRun` 使用 `generation-{run_id}` 作为 LangGraph thread ID。
-- SQLite checkpointer 在每个图步骤同步落盘；Worker 中断后会重新入队并从最近检查点继续。
-- SQLAlchemy 仍是用户、对话、提案和最终行程的业务事实来源。
+这里有几条刻意保留的边界：
 
-## 本地启动
+| 决策 | 原因 |
+| --- | --- |
+| 先选择省市，再开放对话 | 地理范围是确定信息，不需要让模型反复猜测 |
+| 模型提出方案，程序验证并写入 | 防止不完整或错误结构直接污染数据库 |
+| 创建行程与生成行程分开 | 长时间模型调用不阻塞普通 API 请求 |
+| 生成任务由独立 Worker 执行 | API 重启后仍可恢复未完成任务 |
+| 修改先形成提案 | 用户确认前不覆盖现有行程 |
 
-在项目根目录执行：
+LangGraph 检查点保存在本地 SQLite 文件中；每个 `GenerationRun` 都有独立 thread ID。SQLAlchemy 数据库仍然是用户、对话、提案和最终行程的业务事实来源。
+
+## 当前实现
+
+- JWT 注册登录和用户数据隔离
+- 会话上下文、需求草稿与预览确认
+- LangGraph 对话 Agent 和行程生成流程
+- DeepSeek 结构化输出
+- 高德 POI 搜索、地点验证和步行路线规划
+- 可恢复的后台生成任务与可视化进度
+- 通过聊天生成修改提案并应用新行程
+- 桌面端与移动端地图/对话布局
+- Alembic 数据库迁移和 138 项后端测试
+
+## 技术栈
+
+| 部分 | 使用的技术 |
+| --- | --- |
+| 前端 | Vue 3、Vue Router、Vite、高德地图 JS API |
+| API | FastAPI、Pydantic、JWT |
+| Agent | LangChain、LangGraph、DeepSeek |
+| 数据 | SQLAlchemy、Alembic、SQLite |
+| 后台任务 | 独立 Python Worker、数据库任务队列、LangGraph checkpoint |
+| 测试 | unittest、FastAPI TestClient、Playwright |
+
+## 项目结构
+
+```text
+travelmind/
+├── app/
+│   ├── agent/             # 行程生成图、工具和质量检查
+│   ├── conversations/     # 对话 Agent、状态与需求草稿
+│   ├── generation/        # 后台任务与 Worker
+│   ├── integrations/      # DeepSeek 与高德地图
+│   ├── itinerary/         # 行程读取和编辑
+│   ├── auth/              # 登录、JWT 与权限
+│   └── db/                # SQLAlchemy 模型和会话
+├── frontend/              # Vue 前端
+├── alembic/               # 数据库迁移
+├── tests/                 # 回归测试
+├── evals/                 # Agent 评测用例与结果
+└── dev.py                 # 同时启动 API、Worker 和前端
+```
+
+## 本地运行
+
+以下命令以 Windows PowerShell 为例。
+
+### 1. 安装后端依赖
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-Copy-Item .env.example .env
 ```
 
-先生成一个只保存在本机的 JWT 密钥：
+### 2. 配置环境变量
 
 ```powershell
+Copy-Item .env.example .env
+Copy-Item frontend/.env.example frontend/.env
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-把输出填写到 `.env` 的 `JWT_SECRET_KEY`，再填写 DeepSeek 和高德配置。JWT 密钥少于 32 个字符、缺失或仍是示例值时，应用会拒绝启动。然后用迁移建立或升级数据库：
+把最后一条命令生成的随机值填入 `.env` 的 `JWT_SECRET_KEY`，再配置以下服务：
+
+| 变量 | 用途 |
+| --- | --- |
+| `DEEPSEEK_API_KEY` | 对话和行程生成 |
+| `AMAP_API_KEY` | 后端 POI 与路线 Web 服务 |
+| `JWT_SECRET_KEY` | 本地身份令牌签名，至少 32 个随机字符 |
+| `VITE_AMAP_JS_KEY` | 浏览器高德 JS API，填写在 `frontend/.env` |
+| `VITE_AMAP_SECURITY_CODE` | 高德 JS API 安全密钥，填写在 `frontend/.env` |
+
+后端 Web 服务 Key 和前端 JS API Key 不是同一种 Key，请分别在高德控制台创建。
+
+### 3. 建立数据库
 
 ```powershell
 .\.venv\Scripts\python.exe bootstrap_db.py
 ```
 
-聊天和生成额度默认关闭。公开部署时可以在 `.env` 中设置非零值：
+### 4. 安装前端依赖
 
-```dotenv
-MAX_CHAT_MESSAGES_PER_MINUTE=0
-MAX_CHAT_MESSAGES_PER_DAY=0
-MAX_GENERATIONS_PER_MINUTE=0
-MAX_GENERATIONS_PER_DAY=0
-LANGGRAPH_CHECKPOINT_PATH=.runtime/langgraph-checkpoints.db
+```powershell
+Set-Location frontend
+pnpm install
+Set-Location ..
 ```
 
-数值 `0` 表示不限制。`.runtime/` 只保存本地 LangGraph 检查点，不应提交到 Git。
-
-可以使用一个命令同时启动 API、生成任务 Worker 和 Vue 前端：
+### 5. 启动
 
 ```powershell
 .\.venv\Scripts\python.exe dev.py
 ```
 
-浏览器打开 `http://127.0.0.1:5173`。按 `Ctrl+C` 会同时停止三个服务。
+打开 `http://127.0.0.1:5173`。这个命令会同时启动 FastAPI、生成 Worker 和 Vue 前端，按 `Ctrl+C` 可以一起停止。
 
-也可以分别启动 API 和生成任务 Worker：
+如需分别启动：
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
-```
-
-```powershell
 .\.venv\Scripts\python.exe -m app.generation.worker
 ```
-
-API 收到 `POST /trips/{trip_id}/generate` 后只返回持久化的 `queued` 任务。即使 API 重启，Worker 仍能继续读取它。可通过 `GET /trips/{trip_id}/generation-runs/latest` 轮询状态。
-
-## 前端启动
-
-前端位于 `frontend/`，使用 Vue 3、Vue Router 和 Vite。开发环境会把 `/api` 请求代理到 `http://127.0.0.1:8000`。如果不使用根目录的 `dev.py`，需要先手动启动 API 和 Worker：
-
-```powershell
-Set-Location frontend
-Copy-Item .env.example .env
-pnpm install
-pnpm dev
-```
-
-浏览器打开终端显示的本地地址即可。行程详情页即使没有配置地图密钥，也会显示项目自带的路线兜底图；如需真实高德地图，请在 `frontend/.env` 中填写 Web 端 JS API 的 Key 和安全密钥：
-
-## 安全说明
-
-- 真实密钥只允许保存在 `.env` 和 `frontend/.env`，两个文件均被 Git 忽略。
-- 不要提交 SQLite、`.runtime/`、`frontend/dist/` 或日志；构建后的浏览器 JavaScript 会包含前端高德 Key。
-- 前端 Key 应在高德控制台设置可用域名，后端 Web 服务 Key 应按部署环境限制来源。
-- 如果密钥曾出现在聊天、日志、截图或公开仓库中，应先在服务商控制台轮换，再更新本地 `.env`。
-
-```dotenv
-VITE_AMAP_JS_KEY=你的高德_JS_API_Key
-VITE_AMAP_SECURITY_CODE=你的高德安全密钥
-```
-
-这里必须使用高德 Web 端 JS API Key，不能把后端的 Web 服务 Key 暴露给浏览器。
 
 ## 验证
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\.venv\Scripts\python.exe -m alembic check
+
 Set-Location frontend
 pnpm build
 ```
 
-只让 Worker 尝试处理一条任务后退出：
+当前版本的本地验证结果：
 
-```powershell
-.\.venv\Scripts\python.exe -m app.generation.worker --once
+```text
+Backend tests     138 passed
+Alembic check     no pending migration
+Frontend build    passed
+Browser flow      desktop and mobile passed
 ```
+
+## 已知限制
+
+- 目前只验证中国大陆城市和高德地图可检索地点。
+- 生成速度取决于模型和地图服务，完整行程通常需要几十秒。
+- 当前任务队列和 LangGraph checkpoint 使用 SQLite，适合本地演示，不适合多机部署。
+- 暂未接入酒店库存、实时天气、火车票或机票服务。
+- 前端进度展示来自持久化任务阶段，不是模型逐 token 流式输出。
+
+## 安全说明
+
+- 真实密钥只应保存在 `.env` 和 `frontend/.env`，这两个文件都被 Git 忽略。
+- 不要提交 SQLite 数据库、`.runtime/`、日志、`frontend/dist/` 或浏览器测试缓存。
+- 前端高德 Key 会出现在浏览器代码中，应在高德控制台限制可用域名。
+- 如果密钥曾出现在聊天、日志、截图或公开仓库中，应先轮换，再更新本地配置。
+
+## 项目状态
+
+TravelMind 是用于学习和作品展示的个人项目，目前没有在线公共服务。代码可以在本地完整运行，但还没有按照生产系统配置 PostgreSQL、分布式任务队列、集中日志和监控。
