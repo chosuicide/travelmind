@@ -1312,7 +1312,7 @@ class ConversationApiTests(unittest.TestCase):
 
     @patch("app.conversations.service.rebuild_trip_routes")
     @patch("app.integrations.deepseek.generate_modification_response")
-    def test_generated_chat_locks_until_proposal_is_applied(
+    def test_generated_chat_replaces_pending_proposal(
         self,
         mock_generate,
         mock_routes,
@@ -1360,16 +1360,25 @@ class ConversationApiTests(unittest.TestCase):
                 "content": "再调整一次",
             },
         )
-        self.assertEqual(second_preview.status_code, 409)
+        self.assertEqual(second_preview.status_code, 200)
+        replacement_message = second_preview.json()["conversation"]["messages"][-1]
+        replacement_id = replacement_message["modification_proposal_id"]
+        self.assertEqual(replacement_message["message_type"], "proposal")
+        self.assertNotEqual(replacement_id, proposal_id)
         self.assertEqual(
-            second_preview.json()["detail"],
-            "请先应用或暂不修改当前行程方案",
+            second_preview.json()["conversation"]["pending_proposal_id"],
+            replacement_id,
         )
-        mock_generate.assert_called_once()
+        with self.TestingSessionLocal() as db:
+            self.assertEqual(
+                db.get(models.ModificationProposal, proposal_id).status,
+                "dismissed",
+            )
+        self.assertEqual(mock_generate.call_count, 2)
 
         applied = self.client.post(
             f"/conversations/{conversation_id}/modification-proposals/"
-            f"{proposal_id}/apply"
+            f"{replacement_id}/apply"
         )
 
         self.assertEqual(applied.status_code, 200)
@@ -1387,6 +1396,15 @@ class ConversationApiTests(unittest.TestCase):
         )
         self.assertEqual(
             original_proposal_message["payload"]["status"],
+            "stale",
+        )
+        applied_replacement_message = next(
+            message
+            for message in refreshed.json()["messages"]
+            if message["id"] == replacement_message["id"]
+        )
+        self.assertEqual(
+            applied_replacement_message["payload"]["status"],
             "applied",
         )
         second_proposal = self.client.post(
@@ -1401,7 +1419,7 @@ class ConversationApiTests(unittest.TestCase):
         self.assertEqual(latest_message["message_type"], "proposal")
         self.assertNotEqual(
             latest_message["modification_proposal_id"],
-            proposal_id,
+            replacement_id,
         )
         self.assertEqual(
             second_proposal.json()["conversation"]["pending_proposal_id"],
@@ -1494,7 +1512,7 @@ class ConversationApiTests(unittest.TestCase):
 
     @patch("app.conversations.agent.tools.rebuild_trip_routes")
     @patch("app.integrations.deepseek.generate_modification_response")
-    def test_pending_proposal_blocks_even_chat_confirmation(
+    def test_pending_proposal_accepts_chat_confirmation(
         self,
         mock_generate,
         mock_routes,
@@ -1530,17 +1548,16 @@ class ConversationApiTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(confirmed.status_code, 409)
-        self.assertEqual(
-            confirmed.json()["detail"],
-            "请先应用或暂不修改当前行程方案",
+        self.assertEqual(confirmed.status_code, 200)
+        self.assertIsNone(
+            confirmed.json()["conversation"]["pending_proposal_id"]
         )
         with self.TestingSessionLocal() as db:
             proposal = db.get(models.ModificationProposal, proposal_id)
             activity = db.get(models.Activity, activity_id)
-            self.assertEqual(proposal.status, "pending")
-            self.assertEqual(activity.description, "参观岭南建筑")
-            blocked_message = (
+            self.assertEqual(proposal.status, "applied")
+            self.assertEqual(activity.description, "聊天确认后的描述")
+            confirmation_message = (
                 db.query(models.ChatMessage)
                 .filter(
                     models.ChatMessage.client_message_id
@@ -1548,9 +1565,9 @@ class ConversationApiTests(unittest.TestCase):
                 )
                 .first()
             )
-            self.assertIsNone(blocked_message)
+            self.assertIsNotNone(confirmation_message)
         mock_generate.assert_called_once()
-        mock_routes.assert_not_called()
+        mock_routes.assert_called_once()
 
     def test_conversation_list_is_paginated_and_user_isolated(self):
         first_id = self._create_conversation()

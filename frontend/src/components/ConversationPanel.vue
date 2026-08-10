@@ -27,7 +27,7 @@ const hasPendingDraftPreview = computed(() => messages.value.some((message) => (
 )));
 function send() {
   const content = draftText.value.trim();
-  if (!content || props.busy || hasPendingProposal.value) return;
+  if (!content || props.busy) return;
   emit("send", content);
   draftText.value = "";
 }
@@ -135,13 +135,13 @@ watch(
     <form class="chat-composer" @submit.prevent="send">
       <textarea
         v-model="draftText"
-        :placeholder="hasPendingProposal ? '请先处理上方的行程优化建议…' : isGenerated ? '告诉我还想怎样调整…' : '继续告诉我们你的想法…'"
-        :disabled="busy || hasPendingProposal"
+        :placeholder="hasPendingProposal ? '继续补充修改，新方案会替换当前建议…' : isGenerated ? '告诉我还想怎样调整…' : '继续告诉我们你的想法…'"
+        :disabled="busy"
         rows="1"
         maxlength="1000"
         @keydown.enter.exact.prevent="send"
       />
-      <button type="submit" :disabled="busy || hasPendingProposal || !draftText.trim()" aria-label="发送消息">
+      <button type="submit" :disabled="busy || !draftText.trim()" aria-label="发送消息">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 5 16 7-16 7 3-7-3-7Z" /><path d="M7 12h13" /></svg>
       </button>
     </form>

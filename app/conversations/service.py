@@ -481,17 +481,6 @@ def process_agent_message(
     ):
         raise ValueError("conversation no longer accepts requirement messages")
 
-    # === 模块：待确认修改提案锁 ===
-    # 流程：生成态会话 → 查询 pending 提案 → 阻止新消息 → 用户通过按钮处理
-    if generated_mode and conversation.trip_id is not None:
-        pending_proposal = get_pending_modification_proposal(
-            db,
-            conversation.trip_id,
-            conversation.user_id,
-        )
-        if pending_proposal is not None:
-            raise ValueError("请先应用或暂不修改当前行程方案")
-
     check_conversation_quota(conversation.user_id, db)
     usage = start_conversation_usage(
         conversation.user_id,
