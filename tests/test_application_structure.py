@@ -9,6 +9,7 @@ class ApplicationStructureTests(unittest.TestCase):
     def test_all_public_routes_are_registered(self):
         expected_paths = {
             "/",
+            "/health",
             "/auth/register",
             "/auth/login",
             "/conversations",

@@ -8,12 +8,17 @@ from app.core.config import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     JWT_ALGORITHM,
     JWT_SECRET_KEY,
+    MAX_REGISTERED_USERS,
 )
 from app.db import models
 from app.auth.schemas import UserCreate
 
 
 password_hash = PasswordHash.recommended()
+
+
+class AccountLimitReached(Exception):
+    """公开演示环境已经达到允许注册的账号数量。"""
 
 
 class AccountAlreadyExists(Exception):
@@ -53,6 +58,12 @@ def register_user(
 
     if existing_user is not None:
         raise AccountAlreadyExists
+
+    if (
+        MAX_REGISTERED_USERS > 0
+        and db.query(models.User).count() >= MAX_REGISTERED_USERS
+    ):
+        raise AccountLimitReached
 
     new_user = models.User(
         username=user_input.username,

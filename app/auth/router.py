@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.auth.schemas import UserCreate, UserLogin
 from app.auth.service import (
     AccountAlreadyExists,
+    AccountLimitReached,
     authenticate_user,
     create_access_token,
     register_user,
@@ -25,6 +26,11 @@ def register(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Username or email already registered",
+        ) from exc
+    except AccountLimitReached as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="公开演示的注册名额已满。",
         ) from exc
 
     return {

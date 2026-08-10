@@ -94,7 +94,7 @@ LangGraph 检查点保存在本地 SQLite 文件中；每个 `GenerationRun` 都
 - 可恢复的后台生成任务与可视化进度
 - 通过聊天生成修改提案并应用新行程
 - 桌面端与移动端地图/对话布局
-- Alembic 数据库迁移和 138 项后端测试
+- Alembic 数据库迁移和 143 项后端测试
 
 ## 技术栈
 
@@ -123,7 +123,9 @@ travelmind/
 ├── alembic/               # 数据库迁移
 ├── tests/                 # 回归测试
 ├── evals/                 # Agent 评测用例与结果
-└── dev.py                 # 同时启动 API、Worker 和前端
+├── dev.py                 # 同时启动本地 API、Worker 和 Vite
+├── production.py          # 迁移、演示账号与生产进程启动器
+└── Dockerfile             # Vue + FastAPI + Worker 单容器镜像
 ```
 
 ## 本地运行
@@ -186,6 +188,31 @@ Set-Location ..
 .\.venv\Scripts\python.exe -m app.generation.worker
 ```
 
+## Railway 单服务部署
+
+仓库根目录的 `Dockerfile` 会先构建 Vue，再由 FastAPI 提供静态页面；`production.py` 在容器启动时依次执行 Alembic、准备演示账号，并同时启动 API 与生成 Worker。因此公开演示只需要一个 Railway 服务和一个 `/data` 持久化卷。
+
+生产环境至少需要配置这些变量：
+
+| 变量 | 建议值或用途 |
+| --- | --- |
+| `DATABASE_URL` | `sqlite:////data/travelmind.db` |
+| `LANGGRAPH_CHECKPOINT_PATH` | `/data/langgraph-checkpoints.db` |
+| `JWT_SECRET_KEY` | 至少 32 位随机值 |
+| `DEEPSEEK_API_KEY` | 仅保存在 Railway Variables |
+| `AMAP_API_KEY` | 后端 Web 服务 Key |
+| `VITE_AMAP_JS_KEY` | Docker 构建前端时使用的 JS API Key |
+| `VITE_AMAP_SECURITY_CODE` | Docker 构建前端时使用的安全密钥 |
+| `DEMO_USER_*` | 可选的简历演示账号用户名、邮箱和密码 |
+
+公开链接建议同时开启三层保护：
+
+- Railway Serverless，让无人访问的服务自动休眠；首次唤醒会有短暂冷启动。
+- Railway Workspace Hard Limit，避免超出免费额度。
+- 应用内注册、单用户和全站额度。仓库不硬编码次数，部署者可通过 `MAX_REGISTERED_USERS`、`MAX_*_PER_MINUTE` 和 `MAX_*_PER_DAY` 调整。
+
+免费方案适合作品集体验，不承诺持续在线；SQLite 卷也只支持单副本部署。真实产品应拆分 Worker，并换用 PostgreSQL 与正式任务队列。
+
 ## 验证
 
 ```powershell
@@ -199,7 +226,7 @@ pnpm build
 当前版本的本地验证结果：
 
 ```text
-Backend tests     138 passed
+Backend tests     143 passed
 Alembic check     no pending migration
 Frontend build    passed
 Browser flow      desktop and mobile passed

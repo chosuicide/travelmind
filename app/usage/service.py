@@ -7,6 +7,10 @@ from app.core.config import (
     DEEPSEEK_MODEL,
     MAX_CHAT_MESSAGES_PER_DAY,
     MAX_CHAT_MESSAGES_PER_MINUTE,
+    MAX_GLOBAL_CHAT_MESSAGES_PER_DAY,
+    MAX_GLOBAL_CHAT_MESSAGES_PER_MINUTE,
+    MAX_GLOBAL_GENERATIONS_PER_DAY,
+    MAX_GLOBAL_GENERATIONS_PER_MINUTE,
     MAX_GENERATIONS_PER_DAY,
     MAX_GENERATIONS_PER_MINUTE,
 )
@@ -22,6 +26,18 @@ def check_generation_quota(
     now = datetime.now(timezone.utc)
     one_minute_ago = now - timedelta(minutes=1)
 
+    if MAX_GLOBAL_GENERATIONS_PER_MINUTE > 0:
+        global_recent_count = (
+            db.query(models.GenerationUsage)
+            .filter(models.GenerationUsage.created_at >= one_minute_ago)
+            .count()
+        )
+        if global_recent_count >= MAX_GLOBAL_GENERATIONS_PER_MINUTE:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="当前生成请求较多，请稍后再试。",
+            )
+
     if MAX_GENERATIONS_PER_MINUTE > 0:
         recent_count = (
             db.query(models.GenerationUsage)
@@ -34,7 +50,7 @@ def check_generation_quota(
         if recent_count >= MAX_GENERATIONS_PER_MINUTE:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Too many generation requests. Please try again later.",
+                detail="生成请求过于频繁，请稍后再试。",
             )
 
     start_of_day = datetime(
@@ -43,6 +59,18 @@ def check_generation_quota(
         day=now.day,
         tzinfo=timezone.utc,
     )
+    if MAX_GLOBAL_GENERATIONS_PER_DAY > 0:
+        global_daily_count = (
+            db.query(models.GenerationUsage)
+            .filter(models.GenerationUsage.created_at >= start_of_day)
+            .count()
+        )
+        if global_daily_count >= MAX_GLOBAL_GENERATIONS_PER_DAY:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="今天的公开演示生成额度已用完。",
+            )
+
     if MAX_GENERATIONS_PER_DAY > 0:
         daily_count = (
             db.query(models.GenerationUsage)
@@ -55,7 +83,7 @@ def check_generation_quota(
         if daily_count >= MAX_GENERATIONS_PER_DAY:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Daily generation limit reached.",
+                detail="你今天的行程生成次数已用完。",
             )
 
 
@@ -79,6 +107,18 @@ def record_generation_usage(
 def check_conversation_quota(user_id: int, db: Session) -> None:
     now = datetime.now(timezone.utc)
     one_minute_ago = now - timedelta(minutes=1)
+    if MAX_GLOBAL_CHAT_MESSAGES_PER_MINUTE > 0:
+        global_recent_count = (
+            db.query(models.ConversationUsage)
+            .filter(models.ConversationUsage.created_at >= one_minute_ago)
+            .count()
+        )
+        if global_recent_count >= MAX_GLOBAL_CHAT_MESSAGES_PER_MINUTE:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="当前对话请求较多，请稍后再试。",
+            )
+
     if MAX_CHAT_MESSAGES_PER_MINUTE > 0:
         recent_count = (
             db.query(models.ConversationUsage)
@@ -91,7 +131,7 @@ def check_conversation_quota(user_id: int, db: Session) -> None:
         if recent_count >= MAX_CHAT_MESSAGES_PER_MINUTE:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Too many chat requests. Please try again later.",
+                detail="对话请求过于频繁，请稍后再试。",
             )
 
     start_of_day = datetime(
@@ -100,6 +140,18 @@ def check_conversation_quota(user_id: int, db: Session) -> None:
         day=now.day,
         tzinfo=timezone.utc,
     )
+    if MAX_GLOBAL_CHAT_MESSAGES_PER_DAY > 0:
+        global_daily_count = (
+            db.query(models.ConversationUsage)
+            .filter(models.ConversationUsage.created_at >= start_of_day)
+            .count()
+        )
+        if global_daily_count >= MAX_GLOBAL_CHAT_MESSAGES_PER_DAY:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="今天的公开演示对话额度已用完。",
+            )
+
     if MAX_CHAT_MESSAGES_PER_DAY > 0:
         daily_count = (
             db.query(models.ConversationUsage)
@@ -112,7 +164,7 @@ def check_conversation_quota(user_id: int, db: Session) -> None:
         if daily_count >= MAX_CHAT_MESSAGES_PER_DAY:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Daily chat limit reached.",
+                detail="你今天的对话次数已用完。",
             )
 
 

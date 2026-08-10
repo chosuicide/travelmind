@@ -44,6 +44,31 @@ MAX_CHAT_MESSAGES_PER_MINUTE = int(
 MAX_CHAT_MESSAGES_PER_DAY = int(
     os.getenv("MAX_CHAT_MESSAGES_PER_DAY", "0")
 )
+MAX_GLOBAL_GENERATIONS_PER_MINUTE = int(
+    os.getenv("MAX_GLOBAL_GENERATIONS_PER_MINUTE", "0")
+)
+MAX_GLOBAL_GENERATIONS_PER_DAY = int(
+    os.getenv("MAX_GLOBAL_GENERATIONS_PER_DAY", "0")
+)
+MAX_GLOBAL_CHAT_MESSAGES_PER_MINUTE = int(
+    os.getenv("MAX_GLOBAL_CHAT_MESSAGES_PER_MINUTE", "0")
+)
+MAX_GLOBAL_CHAT_MESSAGES_PER_DAY = int(
+    os.getenv("MAX_GLOBAL_CHAT_MESSAGES_PER_DAY", "0")
+)
+
+# === 公开演示配置：限制注册规模，并在部署启动时准备测试账号 ===
+# 流程：读取环境变量 → 未配置时保持本地开发行为 → 生产启动器按需创建账号
+MAX_REGISTERED_USERS = int(os.getenv("MAX_REGISTERED_USERS", "0"))
+DEMO_USER_USERNAME = os.getenv("DEMO_USER_USERNAME", "").strip()
+DEMO_USER_EMAIL = os.getenv("DEMO_USER_EMAIL", "").strip()
+DEMO_USER_PASSWORD = os.getenv("DEMO_USER_PASSWORD", "")
+
+SERVE_FRONTEND = os.getenv("SERVE_FRONTEND", "0").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 GENERATION_WORKER_POLL_SECONDS = float(
     os.getenv("GENERATION_WORKER_POLL_SECONDS", "2")
