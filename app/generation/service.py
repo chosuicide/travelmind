@@ -117,16 +117,46 @@ class GenerationTelemetry:
         self._notify()
 
     def record_quality(self, payload: dict) -> None:
-        self._append(
-            {
-                "type": "quality",
-                "stage": payload.get("stage"),
-                "issues": [
-                    str(issue)[:500]
-                    for issue in payload.get("issues", [])[:10]
-                ],
-            }
-        )
+        raw_issues = payload.get("issues")
+        if raw_issues is None:
+            raw_issues = payload.get("remaining_warnings", [])
+        issues = []
+        for issue in raw_issues[:10]:
+            if isinstance(issue, dict):
+                issues.append(
+                    {
+                        "code": str(issue.get("code", "quality"))[:100],
+                        "severity": str(
+                            issue.get("severity", "warning")
+                        )[:20],
+                        "penalty": float(issue.get("penalty", 0) or 0),
+                        "message": str(issue.get("message", ""))[:500],
+                    }
+                )
+            else:
+                issues.append(
+                    {
+                        "code": "legacy_quality",
+                        "severity": "warning",
+                        "penalty": 0.0,
+                        "message": str(issue)[:500],
+                    }
+                )
+        event = {
+            "type": "quality",
+            "stage": payload.get("stage"),
+            "issues": issues,
+        }
+        for key in (
+            "selected",
+            "warning_penalty",
+            "hard_issue_count",
+            "original_penalty",
+            "repaired_penalty",
+        ):
+            if payload.get(key) is not None:
+                event[key] = payload[key]
+        self._append(event)
         self._notify()
 
     def record_graph(self, payload: dict) -> None:

@@ -1,7 +1,11 @@
 import unittest
 from types import SimpleNamespace
 
-from app.agent.quality import assess_itinerary_quality
+from app.agent.quality import (
+    assess_itinerary_quality,
+    has_hard_quality_issues,
+    quality_penalty,
+)
 
 
 def _activity(
@@ -49,11 +53,14 @@ class AgentQualityTests(unittest.TestCase):
         }
 
         issues = assess_itinerary_quality(trip, itinerary)
+        messages = [issue["message"] for issue in issues]
 
-        self.assertTrue(any("has 6 activities" in issue for issue in issues))
-        self.assertTrue(any("不对外开放" in issue for issue in issues))
-        self.assertTrue(any("backtracks" in issue for issue in issues))
-        self.assertTrue(any("straight-line" in issue for issue in issues))
+        self.assertTrue(any("has 6 activities" in item for item in messages))
+        self.assertTrue(any("不对外开放" in item for item in messages))
+        self.assertTrue(any("backtracks" in item for item in messages))
+        self.assertTrue(any("straight-line" in item for item in messages))
+        self.assertFalse(has_hard_quality_issues(issues))
+        self.assertGreater(quality_penalty(issues), 0)
 
     def test_accepts_compact_same_district_day(self):
         trip = SimpleNamespace(pace="balanced")
@@ -93,7 +100,10 @@ class AgentQualityTests(unittest.TestCase):
         issues = assess_itinerary_quality(trip, itinerary)
 
         self.assertTrue(
-            any("balanced pace requires 2 to 4" in issue for issue in issues)
+            any(
+                "balanced pace requires 2 to 4" in issue["message"]
+                for issue in issues
+            )
         )
 
     def test_reports_sub_poi_from_amap_parent_relationship(self):
@@ -118,7 +128,8 @@ class AgentQualityTests(unittest.TestCase):
         issues = assess_itinerary_quality(trip, itinerary)
 
         self.assertEqual(len(issues), 1)
-        self.assertIn("selects sub-POI", issues[0])
+        self.assertIn("selects sub-POI", issues[0]["message"])
+        self.assertEqual(issues[0]["severity"], "warning")
 
     def test_real_route_can_clear_straight_line_warning(self):
         first = _activity("黄埔古港", "海珠区", 23.10, 113.50)
@@ -176,8 +187,45 @@ class AgentQualityTests(unittest.TestCase):
 
         issues = assess_itinerary_quality(trip, itinerary)
 
-        self.assertTrue(any("summary must be written" in item for item in issues))
-        self.assertTrue(any("description must be written" in item for item in issues))
+        self.assertTrue(
+            any(
+                "summary must be written" in item["message"]
+                for item in issues
+            )
+        )
+        self.assertTrue(
+            any(
+                "description must be written" in item["message"]
+                for item in issues
+            )
+        )
+
+    def test_marks_overlapping_activities_as_hard_issue(self):
+        first = _activity("景点一", "荔湾区", 23.12, 113.24)
+        first.update({"start_time": "09:00", "end_time": "11:00"})
+        second = _activity("景点二", "荔湾区", 23.12, 113.24)
+        second.update({"start_time": "10:30", "end_time": "12:00"})
+        trip = SimpleNamespace(pace="balanced")
+
+        issues = assess_itinerary_quality(
+            trip,
+            {
+                "days": [
+                    {
+                        "day_number": 1,
+                        "activities": [first, second],
+                    }
+                ]
+            },
+        )
+
+        overlap = next(
+            issue
+            for issue in issues
+            if issue["code"] == "activity_overlap"
+        )
+        self.assertEqual(overlap["severity"], "error")
+        self.assertTrue(has_hard_quality_issues(issues))
 
     def test_allows_chinese_copy_with_official_latin_brand_names(self):
         activity = _activity("长沙IFS", "芙蓉区", 28.19, 112.98)

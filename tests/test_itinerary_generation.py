@@ -171,7 +171,20 @@ class ItineraryGenerationApiTests(unittest.TestCase):
                 self.assertEqual(checkpoint.tool_call_count, 1)
                 self.assertEqual(checkpoint.trace[0]["name"], "search_places")
             on_quality_result(
-                {"stage": "tool_check", "issues": []}
+                {
+                    "stage": "selection",
+                    "selected": "repaired",
+                    "original_penalty": 6.0,
+                    "repaired_penalty": 3.0,
+                    "remaining_warnings": [
+                        {
+                            "code": "transfer_distance",
+                            "severity": "warning",
+                            "penalty": 3.0,
+                            "message": "One transfer remains longer than ideal",
+                        }
+                    ],
+                }
             )
             return _agent_itinerary()
 
@@ -208,6 +221,12 @@ class ItineraryGenerationApiTests(unittest.TestCase):
             self.assertEqual(run.tool_call_count, 1)
             self.assertEqual(run.trace[0]["name"], "search_places")
             self.assertNotIn("draft", run.trace[0]["arguments"])
+            self.assertEqual(run.trace[1]["stage"], "selection")
+            self.assertEqual(run.trace[1]["selected"], "repaired")
+            self.assertEqual(
+                run.trace[1]["issues"][0]["code"],
+                "transfer_distance",
+            )
             self.assertEqual(activity.place_provider, "amap")
             self.assertEqual(
                 activity.place_provider_id,

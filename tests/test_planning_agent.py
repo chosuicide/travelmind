@@ -264,10 +264,11 @@ class PlanningAgentTests(unittest.TestCase):
             itinerary["days"][0]["activities"][0]["name"],
             "陈家祠",
         )
-        self.assertEqual(
-            quality_trace,
-            [{"stage": "initial", "issues": []}],
-        )
+        self.assertEqual(len(quality_trace), 1)
+        self.assertEqual(quality_trace[0]["stage"], "initial")
+        self.assertEqual(quality_trace[0]["issues"], [])
+        self.assertEqual(quality_trace[0]["warning_penalty"], 0)
+        self.assertEqual(quality_trace[0]["hard_issue_count"], 0)
 
     def test_agent_observes_tool_result_then_returns_bound_itinerary(self):
         arguments = json.dumps(
@@ -473,8 +474,10 @@ class PlanningAgentTests(unittest.TestCase):
         self.assertTrue(quality_trace[0]["issues"])
         self.assertEqual(quality_trace[1]["stage"], "after_repair")
         self.assertEqual(quality_trace[1]["issues"], [])
+        self.assertEqual(quality_trace[2]["stage"], "selection")
+        self.assertEqual(quality_trace[2]["selected"], "repaired")
 
-    def test_agent_fails_when_repair_does_not_reduce_issues(self):
+    def test_agent_keeps_original_when_repair_does_not_improve(self):
         arguments = json.dumps(
             {
                 "keywords": "景点",
@@ -525,10 +528,153 @@ class PlanningAgentTests(unittest.TestCase):
             )
         )
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "did not resolve",
-        ):
+        quality_trace = []
+        itinerary = PlanningAgent(
+            client=client,
+            model="test-model",
+            tool_executor=executor,
+            on_quality_result=quality_trace.append,
+        ).run(_trip())
+
+        self.assertEqual(
+            [
+                activity["place_provider_id"]
+                for activity in itinerary["days"][0]["activities"]
+            ],
+            ["poi-1", "poi-2", "poi-3", "poi-4"],
+        )
+        self.assertEqual(quality_trace[-1]["stage"], "selection")
+        self.assertEqual(quality_trace[-1]["selected"], "original")
+
+    def test_agent_keeps_improved_repair_with_same_warning_count(self):
+        arguments = json.dumps(
+            {
+                "keywords": "景点",
+                "district": "荔湾区",
+                "category": "attraction",
+                "limit": 3,
+            }
+        )
+        template = json.loads(_final_itinerary())["days"][0]["activities"][0]
+
+        def answer_with_destination(destination_id):
+            return json.dumps(
+                {
+                    "days": [
+                        {
+                            "day_number": 1,
+                            "summary": "城市景点游览",
+                            "activities": [
+                                {
+                                    **template,
+                                    "place_provider_id": "poi-1",
+                                    "start_time": "09:00",
+                                    "end_time": "11:00",
+                                },
+                                {
+                                    **template,
+                                    "place_provider_id": destination_id,
+                                    "start_time": "13:00",
+                                    "end_time": "15:00",
+                                },
+                            ],
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            )
+
+        candidates = [
+            _candidate("poi-1", "起点"),
+            _candidate("poi-2", "远处景点"),
+            _candidate("poi-3", "较近景点"),
+        ]
+        candidates[0].update({"latitude": 23.0, "longitude": 113.0})
+        candidates[1].update({"latitude": 23.0, "longitude": 113.3})
+        candidates[2].update({"latitude": 23.0, "longitude": 113.15})
+        client = _FakeClient(
+            [
+                _response(tool_calls=[_tool_call(arguments)]),
+                _response(content=answer_with_destination("poi-2")),
+                _response(content=answer_with_destination("poi-3")),
+            ]
+        )
+        quality_trace = []
+
+        itinerary = PlanningAgent(
+            client=client,
+            model="test-model",
+            tool_executor=Mock(
+                return_value=_search_tool_result(arguments, candidates)
+            ),
+            on_quality_result=quality_trace.append,
+        ).run(_trip())
+
+        self.assertEqual(
+            itinerary["days"][0]["activities"][1]["place_provider_id"],
+            "poi-3",
+        )
+        self.assertEqual(len(quality_trace[0]["issues"]), 1)
+        self.assertEqual(len(quality_trace[1]["issues"]), 1)
+        self.assertLess(
+            quality_trace[-1]["repaired_penalty"],
+            quality_trace[-1]["original_penalty"],
+        )
+        self.assertEqual(quality_trace[-1]["selected"], "repaired")
+
+    def test_agent_fails_when_hard_overlap_survives_repair(self):
+        arguments = json.dumps(
+            {
+                "keywords": "景点",
+                "district": "荔湾区",
+                "category": "attraction",
+                "limit": 2,
+            }
+        )
+        template = json.loads(_final_itinerary())["days"][0]["activities"][0]
+
+        def overlapping_answer(second_start):
+            return json.dumps(
+                {
+                    "days": [
+                        {
+                            "day_number": 1,
+                            "summary": "城市景点游览",
+                            "activities": [
+                                {
+                                    **template,
+                                    "place_provider_id": "poi-1",
+                                    "start_time": "09:00",
+                                    "end_time": "12:00",
+                                },
+                                {
+                                    **template,
+                                    "place_provider_id": "poi-2",
+                                    "start_time": second_start,
+                                    "end_time": "14:00",
+                                },
+                            ],
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            )
+
+        client = _FakeClient(
+            [
+                _response(tool_calls=[_tool_call(arguments)]),
+                _response(content=overlapping_answer("11:00")),
+                _response(content=overlapping_answer("11:30")),
+            ]
+        )
+        executor = Mock(
+            return_value=_search_tool_result(
+                arguments,
+                [_candidate("poi-1", "景点一"), _candidate("poi-2", "景点二")],
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "hard itinerary issues"):
             PlanningAgent(
                 client=client,
                 model="test-model",
@@ -603,7 +749,10 @@ class PlanningAgentTests(unittest.TestCase):
             [event["stage"] for event in quality_trace],
             ["initial", "repair_rejected"],
         )
-        self.assertIn("duplicate POI", quality_trace[1]["issues"][0])
+        self.assertIn(
+            "duplicate POI",
+            quality_trace[1]["issues"][0]["message"],
+        )
 
     def test_mandatory_validation_repairs_invalid_draft(self):
         search_arguments = json.dumps(

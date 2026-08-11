@@ -1,5 +1,6 @@
 import re
 from math import asin, cos, radians, sin, sqrt
+from typing import Literal, TypedDict
 
 from app.generation.policy import PACE_ACTIVITY_RANGES
 
@@ -21,6 +22,43 @@ ENGLISH_SENTENCE_PATTERN = re.compile(
 )
 MAX_SUMMARY_CHARACTERS = 24
 MAX_DESCRIPTION_CHARACTERS = 100
+
+
+class QualityIssue(TypedDict):
+    code: str
+    severity: Literal["warning", "error"]
+    penalty: float
+    message: str
+
+
+def _issue(
+    code: str,
+    message: str,
+    *,
+    penalty: float,
+    severity: Literal["warning", "error"] = "warning",
+) -> QualityIssue:
+    return {
+        "code": code,
+        "severity": severity,
+        "penalty": round(max(0.0, penalty), 3),
+        "message": message,
+    }
+
+
+def has_hard_quality_issues(issues: list[QualityIssue]) -> bool:
+    return any(issue["severity"] == "error" for issue in issues)
+
+
+def quality_penalty(issues: list[QualityIssue]) -> float:
+    return round(
+        sum(
+            issue["penalty"]
+            for issue in issues
+            if issue["severity"] == "warning"
+        ),
+        3,
+    )
 
 
 def _looks_like_english_sentence(value: str | None) -> bool:
@@ -73,10 +111,13 @@ def _time_minutes(value: str | None) -> int | None:
     return hours * 60 + minutes
 
 
-# === Agent 质量检查器：把可重复计算的问题交回 AI，而不替 AI 做取舍 ===
-# 流程：密度/时间/预算/地点可用性/行政区折返/直线距离 → 问题列表 → AI 修订
-def assess_itinerary_quality(trip, itinerary: dict) -> list[str]:
-    issues = []
+# === Agent 质量检查器：硬错误守住数据底线，软问题用分数比较优化程度 ===
+# 流程：行程 → 结构化问题 → 硬错误拦截 / 软问题计分 → Agent 择优保存
+def assess_itinerary_quality(
+    trip,
+    itinerary: dict,
+) -> list[QualityIssue]:
+    issues: list[QualityIssue] = []
     pace_range = PACE_ACTIVITY_RANGES.get(trip.pace)
     total_cost = 0.0
     checked_routes = getattr(trip, "checked_routes", {})
@@ -88,22 +129,43 @@ def assess_itinerary_quality(trip, itinerary: dict) -> list[str]:
 
         if _looks_like_english_sentence(summary):
             issues.append(
-                f"Day {day_number} summary must be written in Simplified "
-                "Chinese, not an English sentence."
+                _issue(
+                    "summary_language",
+                    f"Day {day_number} summary must be written in Simplified "
+                    "Chinese, not an English sentence.",
+                    penalty=4.0,
+                )
             )
         if summary and len(summary) > MAX_SUMMARY_CHARACTERS:
             issues.append(
-                f"Day {day_number} summary is too long; keep it within "
-                f"{MAX_SUMMARY_CHARACTERS} characters."
+                _issue(
+                    "summary_length",
+                    f"Day {day_number} summary is too long; keep it within "
+                    f"{MAX_SUMMARY_CHARACTERS} characters.",
+                    penalty=(
+                        1.0
+                        + (len(summary) - MAX_SUMMARY_CHARACTERS)
+                        / MAX_SUMMARY_CHARACTERS
+                    ),
+                )
             )
 
         if pace_range and not (
             pace_range[0] <= len(activities) <= pace_range[1]
         ):
+            activity_delta = (
+                pace_range[0] - len(activities)
+                if len(activities) < pace_range[0]
+                else len(activities) - pace_range[1]
+            )
             issues.append(
-                f"Day {day_number} has {len(activities)} activities; "
-                f"{trip.pace} pace requires {pace_range[0]} to "
-                f"{pace_range[1]}."
+                _issue(
+                    "pace_activity_count",
+                    f"Day {day_number} has {len(activities)} activities; "
+                    f"{trip.pace} pace requires {pace_range[0]} to "
+                    f"{pace_range[1]}.",
+                    penalty=2.0 + activity_delta,
+                )
             )
 
         for activity in activities:
@@ -112,26 +174,42 @@ def assess_itinerary_quality(trip, itinerary: dict) -> list[str]:
             description = activity.get("description")
             if _looks_like_english_sentence(description):
                 issues.append(
-                    f'Day {day_number} activity "{name}" description must '
-                    "be written in Simplified Chinese, not an English "
-                    "sentence."
+                    _issue(
+                        "description_language",
+                        f'Day {day_number} activity "{name}" description '
+                        "must be written in Simplified Chinese, not an "
+                        "English sentence.",
+                        penalty=3.0,
+                    )
                 )
             if (
                 description
                 and len(description) > MAX_DESCRIPTION_CHARACTERS
             ):
                 issues.append(
-                    f'Day {day_number} activity "{name}" description is '
-                    "too long; keep it within "
-                    f"{MAX_DESCRIPTION_CHARACTERS} characters."
+                    _issue(
+                        "description_length",
+                        f'Day {day_number} activity "{name}" description is '
+                        "too long; keep it within "
+                        f"{MAX_DESCRIPTION_CHARACTERS} characters.",
+                        penalty=(
+                            1.0
+                            + (len(description) - MAX_DESCRIPTION_CHARACTERS)
+                            / MAX_DESCRIPTION_CHARACTERS
+                        ),
+                    )
                 )
             selection_role = (
                 activity.get("verified_place") or {}
             ).get("selection_role")
             if selection_role == "sub_poi":
                 issues.append(
-                    f'Day {day_number} selects sub-POI "{name}". Prefer '
-                    "its primary parent POI already returned by tools."
+                    _issue(
+                        "sub_poi",
+                        f'Day {day_number} selects sub-POI "{name}". Prefer '
+                        "its primary parent POI already returned by tools.",
+                        penalty=4.0,
+                    )
                 )
                 continue
 
@@ -145,31 +223,47 @@ def assess_itinerary_quality(trip, itinerary: dict) -> list[str]:
             )
             if marker:
                 issues.append(
-                    f'Day {day_number} selects unsuitable or auxiliary '
-                    f'POI "{name}" (marker: {marker}). Prefer a main, '
-                    "visitor-accessible POI already returned by tools."
+                    _issue(
+                        "unsuitable_poi",
+                        f'Day {day_number} selects unsuitable or auxiliary '
+                        f'POI "{name}" (marker: {marker}). Prefer a main, '
+                        "visitor-accessible POI already returned by tools.",
+                        penalty=4.0,
+                    )
                 )
 
         districts = _compressed_districts(activities)
         if len(districts) != len(set(districts)):
             issues.append(
-                f"Day {day_number} backtracks between districts: "
-                f"{' -> '.join(districts)}. Reorder or replace activities."
+                _issue(
+                    "district_backtracking",
+                    f"Day {day_number} backtracks between districts: "
+                    f"{' -> '.join(districts)}. Reorder or replace "
+                    "activities.",
+                    penalty=2.0 + len(districts) - len(set(districts)),
+                )
             )
 
         for first, second in zip(activities, activities[1:]):
             first_end = first.get("end_time")
             second_start = second.get("start_time")
+            first_end_minutes = _time_minutes(first_end)
+            second_start_minutes = _time_minutes(second_start)
             if (
-                first_end is not None
-                and second_start is not None
-                and second_start < first_end
+                first_end_minutes is not None
+                and second_start_minutes is not None
+                and second_start_minutes < first_end_minutes
             ):
+                overlap_minutes = first_end_minutes - second_start_minutes
                 issues.append(
-                    f'Day {day_number} has overlapping activities: '
-                    f'"{first["name"]}" ends at {first_end}, '
-                    f'but "{second["name"]}" starts at '
-                    f'{second_start}.'
+                    _issue(
+                        "activity_overlap",
+                        f'Day {day_number} has overlapping activities: '
+                        f'"{first["name"]}" ends at {first_end}, '
+                        f'but "{second["name"]}" starts at {second_start}.',
+                        severity="error",
+                        penalty=100.0 + overlap_minutes / 60,
+                    )
                 )
 
             first_coordinates = _coordinates(first)
@@ -187,8 +281,6 @@ def assess_itinerary_quality(trip, itinerary: dict) -> list[str]:
                         second.get("place_provider_id"),
                     )
                 )
-                first_end_minutes = _time_minutes(first_end)
-                second_start_minutes = _time_minutes(second_start)
                 available_minutes = (
                     second_start_minutes - first_end_minutes
                     if first_end_minutes is not None
@@ -208,24 +300,49 @@ def assess_itinerary_quality(trip, itinerary: dict) -> list[str]:
                 ):
                     continue
                 if route_minutes is not None:
+                    shortfall = max(
+                        0.0,
+                        route_minutes - (available_minutes or 0),
+                    )
                     issues.append(
-                        f'Day {day_number} route from "{first["name"]}" '
-                        f'to "{second["name"]}" needs about '
-                        f'{route_minutes:.1f} minutes, but the schedule '
-                        f'leaves {available_minutes} minutes.'
+                        _issue(
+                            "transfer_time",
+                            f'Day {day_number} route from "{first["name"]}" '
+                            f'to "{second["name"]}" needs about '
+                            f'{route_minutes:.1f} minutes, but the schedule '
+                            f'leaves {available_minutes} minutes.',
+                            penalty=2.0 + shortfall / 30,
+                        )
                     )
                     continue
                 issues.append(
-                    f'Day {day_number} transfer from "{first["name"]}" '
-                    f'to "{second["name"]}" is about {distance:.1f} km '
-                    "straight-line. Prefer a nearer candidate or reorder."
+                    _issue(
+                        "transfer_distance",
+                        f'Day {day_number} transfer from "{first["name"]}" '
+                        f'to "{second["name"]}" is about {distance:.1f} km '
+                        "straight-line. Prefer a nearer candidate or reorder.",
+                        penalty=(
+                            2.0
+                            + (distance - MAX_URBAN_TRANSFER_KM)
+                            / MAX_URBAN_TRANSFER_KM
+                        ),
+                    )
                 )
 
     budget = getattr(trip, "budget", None)
     if budget is not None and total_cost > float(budget):
+        budget_value = float(budget)
         issues.append(
-            f"Estimated activity cost {total_cost:.2f} exceeds the trip "
-            f"budget {float(budget):.2f}."
+            _issue(
+                "budget_exceeded",
+                f"Estimated activity cost {total_cost:.2f} exceeds the trip "
+                f"budget {budget_value:.2f}.",
+                penalty=(
+                    2.0
+                    + (total_cost - budget_value)
+                    / max(abs(budget_value), 1.0)
+                ),
+            )
         )
 
     return issues

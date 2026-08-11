@@ -7,7 +7,12 @@ from pydantic import ValidationError
 
 from app.agent.context import PlanningContext
 from app.agent.prompts import build_agent_messages
-from app.agent.quality import assess_itinerary_quality
+from app.agent.quality import (
+    QualityIssue,
+    assess_itinerary_quality,
+    has_hard_quality_issues,
+    quality_penalty,
+)
 from app.agent.schemas import AgentItinerary
 from app.agent.tools import TRAVEL_TOOLS, format_tool_result
 
@@ -21,7 +26,7 @@ class PlanningGraphState(TypedDict):
     repair_attempted: bool
     output_repair_attempted: bool
     pre_repair_itinerary: dict | None
-    pre_repair_issues: list[str] | None
+    pre_repair_issues: list[QualityIssue] | None
     model_message: object | None
     result: dict | None
 
@@ -72,6 +77,15 @@ def _quality_trip(trip, context: PlanningContext):
         budget=trip.budget,
         checked_routes=context.routes_by_pair,
     )
+
+
+def _hard_validation_issue(message: str) -> QualityIssue:
+    return {
+        "code": "hard_validation",
+        "severity": "error",
+        "penalty": 100.0,
+        "message": message,
+    }
 
 
 # === 行程生成子图：显式编排模型、工具和质量验证 ===
@@ -208,6 +222,27 @@ def run_planning_graph(agent, trip) -> dict:
                 )
         except (json.JSONDecodeError, ValidationError, ValueError) as exc:
             if state["output_repair_attempted"]:
+                if (
+                    state["repair_attempted"]
+                    and state["pre_repair_itinerary"] is not None
+                    and not has_hard_quality_issues(
+                        state["pre_repair_issues"] or []
+                    )
+                ):
+                    if agent.on_quality_result:
+                        agent.on_quality_result(
+                            {
+                                "stage": "repair_rejected",
+                                "selected": "original",
+                                "issues": [
+                                    _hard_validation_issue(str(exc))
+                                ],
+                            }
+                        )
+                    return {
+                        "result": state["pre_repair_itinerary"],
+                        "phase": "complete",
+                    }
                 raise ValueError(
                     "DeepSeek returned invalid itinerary after one repair "
                     f"attempt: {exc}"
@@ -240,11 +275,27 @@ def run_planning_graph(agent, trip) -> dict:
                 state["repair_attempted"]
                 and state["pre_repair_itinerary"] is not None
             ):
+                if has_hard_quality_issues(
+                    state["pre_repair_issues"] or []
+                ):
+                    raise ValueError(
+                        "DeepSeek did not resolve hard itinerary issues "
+                        "with a valid repair"
+                    ) from exc
                 if agent.on_quality_result:
                     agent.on_quality_result(
-                        {"stage": "repair_rejected", "issues": [str(exc)]}
+                        {
+                            "stage": "repair_rejected",
+                            "selected": "original",
+                            "issues": [
+                                _hard_validation_issue(str(exc))
+                            ],
+                        }
                     )
-                return {"result": state["pre_repair_itinerary"]}
+                return {
+                    "result": state["pre_repair_itinerary"],
+                    "phase": "complete",
+                }
             if state["output_repair_attempted"]:
                 raise
             messages.append(
@@ -278,6 +329,11 @@ def run_planning_graph(agent, trip) -> dict:
                         else "initial"
                     ),
                     "issues": quality_issues,
+                    "warning_penalty": quality_penalty(quality_issues),
+                    "hard_issue_count": sum(
+                        issue["severity"] == "error"
+                        for issue in quality_issues
+                    ),
                 }
             )
         if quality_issues and not state["repair_attempted"]:
@@ -307,15 +363,60 @@ def run_planning_graph(agent, trip) -> dict:
             }
         if (
             state["repair_attempted"]
-            and quality_issues
             and state["pre_repair_itinerary"] is not None
             and state["pre_repair_issues"] is not None
-            and len(quality_issues) >= len(state["pre_repair_issues"])
         ):
-            raise ValueError(
-                "DeepSeek did not resolve the deterministic quality issues "
-                "after one repair attempt"
+            original_issues = state["pre_repair_issues"]
+            original_has_hard_issues = has_hard_quality_issues(
+                original_issues
             )
+            repaired_has_hard_issues = has_hard_quality_issues(
+                quality_issues
+            )
+            original_penalty = quality_penalty(original_issues)
+            repaired_penalty = quality_penalty(quality_issues)
+
+            if repaired_has_hard_issues and original_has_hard_issues:
+                raise ValueError(
+                    "DeepSeek did not resolve hard itinerary issues after "
+                    "one repair attempt"
+                )
+
+            choose_repaired = (
+                not repaired_has_hard_issues
+                and (
+                    original_has_hard_issues
+                    or repaired_penalty < original_penalty
+                )
+            )
+            selected = "repaired" if choose_repaired else "original"
+            selected_itinerary = (
+                itinerary
+                if choose_repaired
+                else state["pre_repair_itinerary"]
+            )
+            if agent.on_quality_result:
+                agent.on_quality_result(
+                    {
+                        "stage": "selection",
+                        "selected": selected,
+                        "original_penalty": original_penalty,
+                        "repaired_penalty": repaired_penalty,
+                        "remaining_warnings": [
+                            issue
+                            for issue in (
+                                quality_issues
+                                if choose_repaired
+                                else original_issues
+                            )
+                            if issue["severity"] == "warning"
+                        ],
+                    }
+                )
+            return {
+                "result": selected_itinerary,
+                "phase": "complete",
+            }
         return {"result": itinerary, "phase": "complete"}
 
     def tools_node(state: PlanningGraphState) -> dict:
