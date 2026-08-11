@@ -84,16 +84,6 @@ class GenerationTelemetry:
                     "mode",
                 )
             }
-        elif tool_name == "check_itinerary":
-            draft = arguments.get("draft") or {}
-            days = draft.get("days") or []
-            safe_arguments = {
-                "day_count": len(days),
-                "activity_count": sum(
-                    len(day.get("activities") or []) for day in days
-                ),
-            }
-
         event = {
             "type": "tool",
             "name": tool_name,
@@ -120,7 +110,6 @@ class GenerationTelemetry:
                         "search_places",
                         "get_place_details",
                         "estimate_route",
-                        "check_itinerary",
                     )
                 },
             }

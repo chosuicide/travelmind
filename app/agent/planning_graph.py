@@ -15,6 +15,7 @@ from app.agent.tools import TRAVEL_TOOLS, format_tool_result
 class PlanningGraphState(TypedDict):
     context: PlanningContext
     messages: list[dict]
+    phase: Literal["research", "draft", "validate", "repair", "complete"]
     turn_count: int
     finalization_requested: bool
     repair_attempted: bool
@@ -114,12 +115,25 @@ def run_planning_graph(agent, trip) -> dict:
             or state["repair_attempted"]
             or state["output_repair_attempted"]
         )
+        must_search_first = (
+            not context.places_by_id
+            and not force_final_response
+        )
         response = agent.client.chat.completions.create(
             model=agent.model,
             messages=messages,
             tools=TRAVEL_TOOLS,
             parallel_tool_calls=False,
-            tool_choice="none" if force_final_response else "auto",
+            tool_choice=(
+                "none"
+                if force_final_response
+                else {
+                    "type": "function",
+                    "function": {"name": "search_places"},
+                }
+                if must_search_first
+                else "auto"
+            ),
             response_format={"type": "json_object"},
             extra_body={"thinking": {"type": "disabled"}},
             max_tokens=4000,
@@ -129,17 +143,19 @@ def run_planning_graph(agent, trip) -> dict:
         message = response.choices[0].message
         message_data = _assistant_message_dict(message)
         messages.append(message_data)
+        next_phase = (
+            "research"
+            if message_data.get("tool_calls")
+            else "draft"
+        )
         if agent.on_graph_event:
             agent.on_graph_event(
                 {
                     "node": "model",
                     "status": "completed",
                     "turn": state["turn_count"] + 1,
-                    "next": (
-                        "tools"
-                        if message_data.get("tool_calls")
-                        else "validate"
-                    ),
+                    "phase": next_phase,
+                    "next": "tools" if next_phase == "research" else "validate",
                 }
             )
         return {
@@ -147,6 +163,7 @@ def run_planning_graph(agent, trip) -> dict:
             "model_message": message_data,
             "turn_count": state["turn_count"] + 1,
             "finalization_requested": finalization_requested,
+            "phase": next_phase,
         }
 
     def route_after_model(
@@ -166,6 +183,7 @@ def run_planning_graph(agent, trip) -> dict:
                     "node": "validate",
                     "status": "running",
                     "turn": state["turn_count"],
+                    "phase": "validate",
                 }
             )
         message = state["model_message"]
@@ -209,6 +227,7 @@ def run_planning_graph(agent, trip) -> dict:
             return {
                 "messages": messages,
                 "model_message": None,
+                "phase": "repair",
                 "output_repair_attempted": True,
                 "finalization_requested": True,
             }
@@ -241,6 +260,7 @@ def run_planning_graph(agent, trip) -> dict:
             return {
                 "messages": messages,
                 "model_message": None,
+                "phase": "repair",
                 "output_repair_attempted": True,
                 "finalization_requested": True,
             }
@@ -279,6 +299,7 @@ def run_planning_graph(agent, trip) -> dict:
             return {
                 "messages": messages,
                 "model_message": None,
+                "phase": "repair",
                 "repair_attempted": True,
                 "finalization_requested": True,
                 "pre_repair_itinerary": itinerary,
@@ -295,7 +316,7 @@ def run_planning_graph(agent, trip) -> dict:
                 "DeepSeek did not resolve the deterministic quality issues "
                 "after one repair attempt"
             )
-        return {"result": itinerary}
+        return {"result": itinerary, "phase": "complete"}
 
     def tools_node(state: PlanningGraphState) -> dict:
         context = state["context"]
@@ -308,7 +329,6 @@ def run_planning_graph(agent, trip) -> dict:
                 }
             )
         messages = list(state["messages"])
-        invalid_check_issues = None
         for tool_call in state["model_message"]["tool_calls"]:
             tool_name = tool_call["function"]["name"]
             raw_arguments = tool_call["function"]["arguments"]
@@ -440,30 +460,11 @@ def run_planning_graph(agent, trip) -> dict:
                     ),
                 }
             )
-            terminal_itinerary = result.get("terminal_itinerary")
-            if terminal_itinerary is not None:
-                if agent.on_quality_result:
-                    agent.on_quality_result(
-                        {"stage": "tool_check", "issues": []}
-                    )
-                return {"messages": messages, "result": terminal_itinerary}
-            if tool_name == "check_itinerary" and not result["content"]["valid"]:
-                invalid_check_issues = result["content"]["issues"]
-
-        if invalid_check_issues is not None:
-            messages.append(
-                {
-                    "role": "user",
-                    "content": (
-                        "This draft is not accepted. Fix every issue using "
-                        "only already-seen POIs, then call check_itinerary "
-                        "again with the complete revised draft. Do not return "
-                        "final JSON before the check passes. Issues:\n"
-                        + json.dumps(invalid_check_issues, ensure_ascii=False)
-                    ),
-                }
-            )
-        return {"messages": messages, "model_message": None}
+        return {
+            "messages": messages,
+            "model_message": None,
+            "phase": "research",
+        }
 
     def route_after_action(
         state: PlanningGraphState,
@@ -504,6 +505,7 @@ def run_planning_graph(agent, trip) -> dict:
                 trip,
                 max_tool_calls=agent.max_tool_calls,
             ),
+            "phase": "research",
             "turn_count": 0,
             "finalization_requested": False,
             "repair_attempted": False,

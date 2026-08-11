@@ -5,7 +5,7 @@ from app.prompt_engine.formatter import (
 )
 
 
-AGENT_PROMPT_VERSION = "itinerary-v5-zh-cn-output"
+AGENT_PROMPT_VERSION = "itinerary-v6-mandatory-validation"
 
 
 # === Agent 提示词：让 AI 主动搜索、观察候选，再提交最终行程 ===
@@ -33,9 +33,8 @@ Tool rules:
   relevant remaining_by_tool value allows.
 - Reserve calls for every planning phase. Search at most
   {tool_limits['search_places']} times, get details at most
-  {tool_limits['get_place_details']} times, estimate routes at most
-  {tool_limits['estimate_route']} times, and check drafts at most
-  {tool_limits['check_itinerary']} times.
+  {tool_limits['get_place_details']} times, and estimate routes at most
+  {tool_limits['estimate_route']} times.
 - One search can return up to 5 candidates. Reuse those candidates instead
   of searching separately for every final activity.
 - Call search_places before selecting any attraction or restaurant.
@@ -44,10 +43,9 @@ Tool rules:
   opening hours, rating, cost or suitability affects the plan.
 - Use estimate_route for consecutive places whose travel time is uncertain,
   especially when districts differ. Use walking, transit or driving as fits.
-- Before the final answer, call check_itinerary with one complete draft.
-  A valid checked draft is accepted immediately as the final result; do not
-  rewrite it. If issues are returned, revise using already-seen POIs and check
-  the complete draft again.
+- When the evidence is sufficient, return the complete draft. The Graph always
+  sends it through mandatory schema, POI and quality validation; validation is
+  not an optional model action.
 - Search for both attractions and restaurants when the trip needs them.
 - Use only place_provider_id values returned by tools in this conversation.
 - Prefer candidates whose selection_role is "primary".

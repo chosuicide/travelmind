@@ -225,7 +225,7 @@ class PlanningAgentTests(unittest.TestCase):
         self.assertEqual(tool_trace[0]["status"], "failed")
         self.assertEqual(tool_trace[0]["error"], "RuntimeError")
 
-    def test_valid_check_tool_result_finishes_without_model_rewrite(self):
+    def test_final_draft_is_always_validated_by_graph(self):
         search_arguments = json.dumps(
             {
                 "keywords": "岭南历史建筑",
@@ -234,24 +234,12 @@ class PlanningAgentTests(unittest.TestCase):
                 "limit": 3,
             }
         )
-        check_arguments = json.dumps(
-            {"draft": json.loads(_final_itinerary())},
-            ensure_ascii=False,
-        )
         client = _FakeClient(
             [
                 _response(
                     tool_calls=[_tool_call(search_arguments)]
                 ),
-                _response(
-                    tool_calls=[
-                        _tool_call(
-                            check_arguments,
-                            call_id="call-2",
-                            name="check_itinerary",
-                        )
-                    ]
-                ),
+                _response(content=_final_itinerary()),
             ]
         )
 
@@ -261,11 +249,7 @@ class PlanningAgentTests(unittest.TestCase):
                     raw_arguments,
                     [_candidate()],
                 )
-            return execute_travel_tool(
-                tool_name,
-                raw_arguments,
-                context,
-            )
+            raise AssertionError(f"unexpected tool: {tool_name}")
 
         quality_trace = []
         itinerary = PlanningAgent(
@@ -282,7 +266,7 @@ class PlanningAgentTests(unittest.TestCase):
         )
         self.assertEqual(
             quality_trace,
-            [{"stage": "tool_check", "issues": []}],
+            [{"stage": "initial", "issues": []}],
         )
 
     def test_agent_observes_tool_result_then_returns_bound_itinerary(self):
@@ -350,7 +334,10 @@ class PlanningAgentTests(unittest.TestCase):
         )
         self.assertEqual(
             client.chat.completions.requests[0]["tool_choice"],
-            "auto",
+            {
+                "type": "function",
+                "function": {"name": "search_places"},
+            },
         )
         self.assertFalse(
             client.chat.completions.requests[0]["parallel_tool_calls"]
@@ -618,7 +605,7 @@ class PlanningAgentTests(unittest.TestCase):
         )
         self.assertIn("duplicate POI", quality_trace[1]["issues"][0])
 
-    def test_invalid_check_requires_a_revised_check(self):
+    def test_mandatory_validation_repairs_invalid_draft(self):
         search_arguments = json.dumps(
             {
                 "keywords": "历史景点",
@@ -649,28 +636,10 @@ class PlanningAgentTests(unittest.TestCase):
                     tool_calls=[_tool_call(search_arguments)]
                 ),
                 _response(
-                    tool_calls=[
-                        _tool_call(
-                            json.dumps(
-                                {"draft": invalid_draft},
-                                ensure_ascii=False,
-                            ),
-                            call_id="call-2",
-                            name="check_itinerary",
-                        )
-                    ]
+                    content=json.dumps(invalid_draft, ensure_ascii=False)
                 ),
                 _response(
-                    tool_calls=[
-                        _tool_call(
-                            json.dumps(
-                                {"draft": valid_draft},
-                                ensure_ascii=False,
-                            ),
-                            call_id="call-3",
-                            name="check_itinerary",
-                        )
-                    ]
+                    content=json.dumps(valid_draft, ensure_ascii=False)
                 ),
             ]
         )
@@ -684,11 +653,7 @@ class PlanningAgentTests(unittest.TestCase):
                         for index in range(1, 5)
                     ],
                 )
-            return execute_travel_tool(
-                tool_name,
-                raw_arguments,
-                context,
-            )
+            raise AssertionError(f"unexpected tool: {tool_name}")
 
         itinerary = PlanningAgent(
             client=client,
@@ -699,7 +664,7 @@ class PlanningAgentTests(unittest.TestCase):
         self.assertEqual(len(itinerary["days"][0]["activities"]), 3)
         third_messages = client.chat.completions.requests[2]["messages"]
         self.assertEqual(third_messages[-1]["role"], "user")
-        self.assertIn("not accepted", third_messages[-1]["content"])
+        self.assertIn("Quality issues", third_messages[-1]["content"])
 
     def test_agent_repairs_incorrect_day_count_once(self):
         trip = _trip()

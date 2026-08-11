@@ -70,11 +70,10 @@ class GenerationLimitTests(unittest.TestCase):
                 "search_places": 4,
                 "get_place_details": 2,
                 "estimate_route": 2,
-                "check_itinerary": 2,
             },
         )
-        self.assertEqual(sum(get_tool_call_limits(3).values()), 17)
-        self.assertEqual(sum(get_tool_call_limits(5).values()), 22)
+        self.assertEqual(sum(get_tool_call_limits(3).values()), 15)
+        self.assertEqual(sum(get_tool_call_limits(5).values()), 20)
 
     @patch("app.agent.PlanningAgent")
     def test_real_agent_entry_uses_tiered_total_budget(
@@ -83,7 +82,7 @@ class GenerationLimitTests(unittest.TestCase):
     ):
         mock_agent_class.return_value.run.return_value = {"days": []}
 
-        for total_days, expected_budget in ((1, 10), (3, 17), (5, 22)):
+        for total_days, expected_budget in ((1, 8), (3, 15), (5, 20)):
             with self.subTest(total_days=total_days):
                 generate_itinerary_with_tools(_trip(total_days))
                 self.assertEqual(
@@ -110,10 +109,10 @@ class GenerationLimitTests(unittest.TestCase):
     def test_agent_prompt_uses_new_density_and_three_day_budget(self):
         prompt = build_agent_messages(
             _trip(3),
-            max_tool_calls=17,
+            max_tool_calls=15,
         )[0]["content"]
 
-        self.assertIn("at most 17 tool calls", prompt)
+        self.assertIn("at most 15 tool calls", prompt)
         self.assertIn("Search at most\n  8 times", prompt)
         self.assertIn("Every tool result includes tool_budget", prompt)
         self.assertIn("remaining_by_tool", prompt)
@@ -150,6 +149,10 @@ class GenerationLimitTests(unittest.TestCase):
             telemetry.trace[0]["tool_budget"]["remaining_by_tool"]
             ["search_places"],
             7,
+        )
+        self.assertNotIn(
+            "check_itinerary",
+            telemetry.trace[0]["tool_budget"]["remaining_by_tool"],
         )
 
     def test_generation_trace_records_langgraph_node_events(self):

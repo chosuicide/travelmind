@@ -91,8 +91,9 @@ Rules:
 3. Every turn must choose exactly one available action. If the user asks for
    a change, call propose_itinerary_modification. Do not merely describe what
    could change and do not claim it has already changed.
-4. The API blocks new chat messages while a proposal is pending. The user
-   must apply or dismiss it through the proposal controls before chatting.
+4. A pending proposal is non-blocking. The user may ask questions or request
+   another revision; a new concrete revision replaces the previous proposal.
+   Only an explicit confirmation may apply it.
 5. If the previous conversation discussed a concrete modification direction
    and the user now agrees with words such as "可以", "继续", "就这样" or
    "是的", call propose_itinerary_modification with the complete direction

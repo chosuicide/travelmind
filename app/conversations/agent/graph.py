@@ -18,10 +18,23 @@ from app.conversations.agent.tools import (
 from app.conversations.extractor import sanitize_agent_reply
 from app.core.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
 from app.db import models
+from app.modifications.actions import detect_proposal_action
 from app.modifications.service import (
     build_itinerary_snapshot,
     get_pending_modification_proposal,
 )
+
+
+ConversationPhase = Literal[
+    "collecting",
+    "preview_pending",
+    "generated",
+    "proposal_pending",
+]
+
+
+class ConversationGraphState(MessagesState):
+    phase: ConversationPhase
 
 
 @dataclass(frozen=True)
@@ -76,81 +89,8 @@ def _usage(messages: list) -> dict:
     }
 
 
-def _should_force_modification_proposal(
-    user_message: str,
-    history: list[dict] | None,
-) -> bool:
-    """Recognize only the commit boundary; the model still designs the change."""
-    text = user_message.strip().lower()
-    question_markers = ("为什么", "怎么", "如何", "是否", "吗", "？", "?")
-    direct_change_markers = (
-        "帮我改",
-        "我想改",
-        "想换",
-        "换掉",
-        "换成",
-        "改成",
-        "改一下",
-        "调整一下",
-        "安排得",
-        "安排成",
-        "删除",
-        "删掉",
-        "增加",
-        "新增",
-        "不要去",
-        "不要安排",
-    )
-    if not any(marker in text for marker in question_markers):
-        if text.startswith(("换 ", "换，", "改 ", "改，", "调整 ", "调整，")):
-            return True
-        if any(marker in text for marker in direct_change_markers):
-            return True
-
-    affirmative_markers = (
-        "可以",
-        "继续",
-        "是的",
-        "对",
-        "行",
-        "好",
-        "就这样",
-        "按这个",
-        "开始吧",
-        "提交吧",
-        "生成吧",
-    )
-    compact = "".join(text.split()).strip("。！!，,")
-    if len(compact) > 16 or not any(
-        compact.startswith(marker) for marker in affirmative_markers
-    ):
-        return False
-
-    last_assistant = next(
-        (
-            str(item.get("content", ""))
-            for item in reversed(history or [])
-            if item.get("role") == "assistant" and item.get("content")
-        ),
-        "",
-    )
-    plan_markers = (
-        "修改",
-        "调整",
-        "换成",
-        "方案",
-        "方向",
-        "提交",
-        "生成",
-        "这样安排",
-        "对吗",
-        "可以吗",
-    )
-    return any(marker in last_assistant for marker in plan_markers)
-
-
-# === LangGraph 会话循环：Agent 自主选择工具，工具结果再返回 Agent ===
-# 流程：Agent → 有工具则执行 → Agent读取结果 → 无工具则自然结束
+# === LangGraph 会话状态路由：数据库状态决定阶段，模型只决定阶段内动作 ===
+# 流程：读取 collecting/preview/generated/proposal → 决策动作 → 工具执行 → 回复
 def run_conversation_agent(
     db,
     conversation,
@@ -165,6 +105,8 @@ def run_conversation_agent(
         conversation=conversation,
         history=list(history or []),
     )
+    pending_proposal = None
+    current_preview = None
     if generated_trip:
         trip = db.get(models.Trip, conversation.trip_id)
         if trip is None or trip.user_id != conversation.user_id:
@@ -201,6 +143,45 @@ def run_conversation_agent(
             conversation.draft_revision,
             preview_summary,
         )
+    phase: ConversationPhase
+    if pending_proposal is not None:
+        phase = "proposal_pending"
+    elif generated_trip:
+        phase = "generated"
+    elif current_preview is not None:
+        phase = "preview_pending"
+    else:
+        phase = "collecting"
+
+    if phase == "proposal_pending":
+        proposal_action = detect_proposal_action(user_message)
+        if proposal_action is not None:
+            tool_name = {
+                "apply": "apply_itinerary_modification",
+                "dismiss": "dismiss_itinerary_modification",
+            }[proposal_action]
+            result = context.execute(
+                tool_name,
+                {},
+                f"deterministic-{proposal_action}-{pending_proposal.id}",
+            )
+            if not result.get("ok"):
+                raise ValueError(result.get("error") or "proposal action failed")
+            content = {
+                "apply": "修改已经应用，行程与路线也已重新计算。",
+                "dismiss": "这份修改建议已取消，原行程保持不变。",
+            }[proposal_action]
+            return AgentRunResult(
+                content=content,
+                accepted=context.accepted,
+                usage={"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+                preview_payload=None,
+                generation_preview_id=None,
+                tool_events=list(context.tool_events),
+                proposal_payload=context.proposal_payload,
+                proposal_id=context.proposal_id,
+                trip_changed=context.trip_changed,
+            )
     initial_messages = [SystemMessage(content=system_prompt)]
     for item in (history or [])[-30:]:
         if item.get("role") == "user" and item.get("content"):
@@ -211,17 +192,6 @@ def run_conversation_agent(
 
     base_model = model or _build_model()
     available_tools = tool_schemas_for(generated_trip=generated_trip)
-    force_proposal = generated_trip and _should_force_modification_proposal(
-        user_message,
-        history,
-    )
-    if force_proposal:
-        available_tools = [
-            schema
-            for schema in available_tools
-            if schema["function"]["name"]
-            == "propose_itinerary_modification"
-        ]
     tool_choice = "required" if generated_trip else "auto"
     llm = base_model.bind_tools(
         available_tools,
@@ -250,29 +220,33 @@ def run_conversation_agent(
             )
         return {"messages": tool_messages}
 
-    def route(state: MessagesState) -> Literal["tools", "__end__"]:
+    def route(state: MessagesState) -> Literal["execute", "end"]:
         last_message = state["messages"][-1]
-        return "tools" if getattr(last_message, "tool_calls", None) else END
+        return "execute" if getattr(last_message, "tool_calls", None) else "end"
 
-    def route_after_tools(state: MessagesState) -> Literal["agent", "__end__"]:
+    def route_after_tools(state: MessagesState) -> Literal["continue", "end"]:
         if not generated_trip:
-            return "agent"
+            return "continue"
         last_result = context.tool_events[-1]["result"]
-        return END if last_result.get("ok") else "agent"
+        return "end" if last_result.get("ok") else "continue"
 
-    builder = StateGraph(MessagesState)
-    builder.add_node("agent", agent_node)
-    builder.add_node("tools", tool_node)
-    builder.add_edge(START, "agent")
-    builder.add_conditional_edges("agent", route, ["tools", END])
+    builder = StateGraph(ConversationGraphState)
+    builder.add_node("decide_action", agent_node)
+    builder.add_node("execute_action", tool_node)
+    builder.add_edge(START, "decide_action")
     builder.add_conditional_edges(
-        "tools",
+        "decide_action",
+        route,
+        {"execute": "execute_action", "end": END},
+    )
+    builder.add_conditional_edges(
+        "execute_action",
         route_after_tools,
-        {"agent": "agent", END: END},
+        {"continue": "decide_action", "end": END},
     )
     graph = builder.compile()
     state = graph.invoke(
-        {"messages": initial_messages},
+        {"messages": initial_messages, "phase": phase},
         config={"recursion_limit": 10},
     )
     final_message = state["messages"][-1]

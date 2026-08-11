@@ -13,19 +13,16 @@ TOOL_CALL_LIMITS_BY_MAX_DAYS = {
         "search_places": 4,
         "get_place_details": 2,
         "estimate_route": 2,
-        "check_itinerary": 2,
     },
     3: {
         "search_places": 8,
         "get_place_details": 3,
         "estimate_route": 4,
-        "check_itinerary": 2,
     },
     5: {
         "search_places": 12,
         "get_place_details": 4,
         "estimate_route": 4,
-        "check_itinerary": 2,
     },
 }
 

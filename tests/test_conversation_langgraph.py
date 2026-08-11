@@ -140,10 +140,12 @@ class ConversationLangGraphTests(unittest.TestCase):
             self.assertEqual(result.usage["total_tokens"], 65)
             self.assertEqual(len(model.bound_tools), 3)
 
+    @patch("app.conversations.agent.tools.rebuild_trip_routes")
     @patch("app.integrations.deepseek.generate_modification_response")
     def test_generated_trip_requires_an_explicit_propose_or_reply_action(
         self,
         mock_generate_modification,
+        mock_rebuild_routes,
     ):
         mock_generate_modification.return_value = ModificationAgentResponse(
             action="proposal",
@@ -223,16 +225,35 @@ class ConversationLangGraphTests(unittest.TestCase):
             db.flush()
 
             self.assertEqual(
-                propose_model.bound_tools[0]["function"]["name"],
-                "propose_itinerary_modification",
+                {
+                    tool["function"]["name"]
+                    for tool in propose_model.bound_tools
+                },
+                {
+                    "propose_itinerary_modification",
+                    "reply_to_generated_trip",
+                },
             )
             self.assertEqual(
                 propose_model.bound_kwargs["tool_choice"],
                 "required",
             )
-            self.assertEqual(len(propose_model.bound_tools), 1)
+            self.assertEqual(len(propose_model.bound_tools), 2)
             self.assertEqual(proposed.proposal_payload["status"], "pending")
             self.assertEqual(activity.description, "参观寺院")
+
+            confirmed = run_conversation_agent(
+                db,
+                conversation,
+                "确认修改",
+                model=ScriptedChatModel([]),
+            )
+            db.flush()
+
+            self.assertTrue(confirmed.trip_changed)
+            self.assertEqual(confirmed.proposal_payload["status"], "applied")
+            self.assertEqual(activity.description, "慢慢游览，不要太赶")
+            mock_rebuild_routes.assert_called_once()
 
 
 if __name__ == "__main__":

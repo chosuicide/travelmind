@@ -1,11 +1,8 @@
-from types import SimpleNamespace
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agent.context import PlanningContext
-from app.agent.quality import assess_itinerary_quality
-from app.agent.schemas import AgentItinerary
 from app.integrations.amap import (
     estimate_place_route,
     fetch_place_detail,
@@ -37,10 +34,6 @@ class EstimateRouteArguments(StrictToolArguments):
     mode: Literal["walking", "driving", "transit"]
 
 
-class CheckItineraryArguments(StrictToolArguments):
-    draft: AgentItinerary
-
-
 def _tool_definition(name: str, description: str, model) -> dict:
     return {
         "type": "function",
@@ -52,8 +45,8 @@ def _tool_definition(name: str, description: str, model) -> dict:
     }
 
 
-# === Agent 四工具协议：搜索、详情、路线和整份草案检查各司其职 ===
-# 流程：Pydantic 参数边界 → JSON Schema → DeepSeek tools 参数
+# === Agent 三工具协议：模型提供查询参数，Graph 决定调用与验证阶段 ===
+# 流程：Pydantic 参数边界 → 外部旅行能力 → Graph 强制验证
 TRAVEL_TOOLS = [
     _tool_definition(
         "search_places",
@@ -78,15 +71,6 @@ TRAVEL_TOOLS = [
             "POIs previously returned by search_places."
         ),
         EstimateRouteArguments,
-    ),
-    _tool_definition(
-        "check_itinerary",
-        (
-            "Check a complete itinerary draft for pace, unsuitable POIs, "
-            "district backtracking and long transfers. The draft may only "
-            "reference POIs previously returned by search_places."
-        ),
-        CheckItineraryArguments,
     ),
 ]
 
@@ -183,47 +167,6 @@ def execute_travel_tool(
         return {
             "content": route,
             "places": [],
-        }
-
-    if tool_name == "check_itinerary":
-        arguments = CheckItineraryArguments.model_validate_json(
-            raw_arguments
-        )
-        canonical_draft = context.bind_final_itinerary(
-            arguments.draft.model_dump()
-        )
-        issues = []
-        if len(canonical_draft["days"]) != context.total_days:
-            issues.append(
-                "Draft has an incorrect number of days: expected "
-                f"{context.total_days}, got {len(canonical_draft['days'])}."
-            )
-        expected_numbers = list(range(1, context.total_days + 1))
-        actual_numbers = [
-            day["day_number"] for day in canonical_draft["days"]
-        ]
-        if actual_numbers != expected_numbers:
-            issues.append(
-                "Draft has an invalid day_number sequence: expected "
-                f"{expected_numbers}, got {actual_numbers}."
-            )
-        issues.extend(assess_itinerary_quality(
-            SimpleNamespace(
-                pace=context.pace,
-                budget=context.budget,
-                checked_routes=context.routes_by_pair,
-            ),
-            canonical_draft,
-        ))
-        return {
-            "content": {
-                "valid": not issues,
-                "issues": issues,
-            },
-            "places": [],
-            "terminal_itinerary": (
-                canonical_draft if not issues else None
-            ),
         }
 
     raise ValueError(f"Unknown travel tool: {tool_name}")

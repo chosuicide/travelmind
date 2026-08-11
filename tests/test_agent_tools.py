@@ -51,7 +51,7 @@ def _draft(place_id: str) -> dict:
     }
 
 
-# === Agent 四工具测试：搜索引入 ID，其余工具只能消费已见可信地点 ===
+# === Agent 工具测试：搜索引入 ID，详情与路线只能消费已见可信地点 ===
 # 流程：工具 Schema → 上下文归属 → 外部能力 Mock → 统一观察结果
 class AgentToolTests(unittest.TestCase):
     def setUp(self):
@@ -63,7 +63,7 @@ class AgentToolTests(unittest.TestCase):
         self.destination = _place("poi-2", "荔枝湾", 113.236)
         self.context.remember_places([self.origin, self.destination])
 
-    def test_exactly_four_tools_are_exposed(self):
+    def test_only_external_travel_tools_are_exposed(self):
         names = {
             tool["function"]["name"]
             for tool in TRAVEL_TOOLS
@@ -74,7 +74,6 @@ class AgentToolTests(unittest.TestCase):
                 "search_places",
                 "get_place_details",
                 "estimate_route",
-                "check_itinerary",
             },
         )
 
@@ -186,64 +185,13 @@ class AgentToolTests(unittest.TestCase):
                 self.context,
             )
 
-    def test_check_itinerary_binds_seen_places_before_checking(self):
-        result = execute_travel_tool(
-            "check_itinerary",
-            json.dumps({"draft": _draft("poi-1")}),
-            self.context,
-        )
-        self.assertTrue(result["content"]["valid"])
-        self.assertEqual(result["content"]["issues"], [])
-        self.assertIsNotNone(result["terminal_itinerary"])
-
-        with self.assertRaisesRegex(ValueError, "not returned"):
+    def test_validation_is_not_a_model_callable_tool(self):
+        with self.assertRaisesRegex(ValueError, "Unknown travel tool"):
             execute_travel_tool(
                 "check_itinerary",
-                json.dumps({"draft": _draft("unknown")}),
+                json.dumps({"draft": _draft("poi-1")}),
                 self.context,
             )
-
-    def test_check_itinerary_rejects_wrong_day_count(self):
-        self.context.total_days = 2
-
-        result = execute_travel_tool(
-            "check_itinerary",
-            json.dumps({"draft": _draft("poi-1")}),
-            self.context,
-        )
-
-        self.assertFalse(result["content"]["valid"])
-        self.assertIn(
-            "incorrect number of days",
-            result["content"]["issues"][0],
-        )
-        self.assertIsNone(result["terminal_itinerary"])
-
-    def test_check_itinerary_detects_overlap_and_budget_excess(self):
-        self.context.budget = 30
-        draft = _draft("poi-1")
-        draft["days"][0]["activities"].append(
-            {
-                "place_provider_id": "poi-2",
-                "name": "AI 名称二",
-                "location": "AI 地址二",
-                "start_time": "10:30",
-                "end_time": "12:00",
-                "estimated_cost": 20,
-                "description": "测试二",
-            }
-        )
-
-        result = execute_travel_tool(
-            "check_itinerary",
-            json.dumps({"draft": draft}),
-            self.context,
-        )
-
-        issues = " ".join(result["content"]["issues"])
-        self.assertIn("overlapping activities", issues)
-        self.assertIn("exceeds the trip budget", issues)
-        self.assertIsNone(result["terminal_itinerary"])
 
     def test_tool_arguments_reject_extra_fields(self):
         with self.assertRaises(ValidationError):
