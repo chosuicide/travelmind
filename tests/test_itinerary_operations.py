@@ -11,7 +11,12 @@ from sqlalchemy.pool import StaticPool
 from app.auth.dependencies import get_current_user
 from app.db import models
 from app.db.session import Base, get_db
+from app.itinerary.schemas import ItineraryOperationsRequest
 from app.main import app
+from app.modifications.service import (
+    ModificationProposalInvalid,
+    create_modification_proposal,
+)
 
 
 # === 行程编辑接口测试：使用隔离内存数据库和假的高德响应 ===
@@ -411,6 +416,90 @@ class ItineraryOperationsApiTests(unittest.TestCase):
             response.json()["detail"],
             "Unverified place: 不存在的景点",
         )
+
+    def test_modification_card_uses_preverified_canonical_place(self):
+        with self.TestingSessionLocal() as db:
+            trip = db.get(models.Trip, self.trip_id)
+            request = ItineraryOperationsRequest.model_validate(
+                {
+                    "operations": [
+                        {
+                            "type": "add_activity",
+                            "day_id": self.day_one_id,
+                            "activity": {
+                                "name": "东山湖公园",
+                                "location": "越秀区",
+                                "start_time": "18:00",
+                                "end_time": "19:30",
+                            },
+                        }
+                    ]
+                }
+            )
+            with patch(
+                "app.modifications.service.search_place",
+                return_value={
+                    "amap_id": "verified-poi",
+                    "name": "东山湖公园",
+                    "address": "广州市越秀区东湖路123号",
+                    "latitude": 23.12,
+                    "longitude": 113.29,
+                },
+            ):
+                proposal = create_modification_proposal(
+                    db=db,
+                    trip=trip,
+                    user_id=self.owner_id,
+                    message="晚上增加东山湖公园",
+                    request=request,
+                )
+
+            self.assertEqual(
+                proposal.preview[0]["after"]["name"],
+                "东山湖公园",
+            )
+            self.assertEqual(
+                proposal.preview[0]["after"]["location"],
+                "广州市越秀区东湖路123号",
+            )
+
+    def test_unverified_place_never_creates_modification_card(self):
+        with self.TestingSessionLocal() as db:
+            trip = db.get(models.Trip, self.trip_id)
+            request = ItineraryOperationsRequest.model_validate(
+                {
+                    "operations": [
+                        {
+                            "type": "add_activity",
+                            "day_id": self.day_one_id,
+                            "activity": {
+                                "name": "模型编造的老字号夜宵城",
+                                "location": "广州市",
+                            },
+                        }
+                    ]
+                }
+            )
+            with patch(
+                "app.modifications.service.search_place",
+                return_value=None,
+            ):
+                with self.assertRaisesRegex(
+                    ModificationProposalInvalid,
+                    "未能在高德中确认地点",
+                ):
+                    create_modification_proposal(
+                        db=db,
+                        trip=trip,
+                        user_id=self.owner_id,
+                        message="增加一个夜宵地点",
+                        request=request,
+                    )
+
+            self.assertEqual(
+                db.query(models.ModificationProposal).count(),
+                0,
+            )
 
 
 if __name__ == "__main__":

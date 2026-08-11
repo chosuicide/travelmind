@@ -1,4 +1,5 @@
 import json
+from hashlib import sha256
 from types import SimpleNamespace
 from typing import Literal, TypedDict
 
@@ -18,6 +19,7 @@ from app.agent.tools import TRAVEL_TOOLS, format_tool_result
 
 
 class PlanningGraphState(TypedDict):
+    input_fingerprint: str
     context: PlanningContext
     messages: list[dict]
     phase: Literal["research", "draft", "validate", "repair", "complete"]
@@ -86,6 +88,27 @@ def _hard_validation_issue(message: str) -> QualityIssue:
         "penalty": 100.0,
         "message": message,
     }
+
+
+def _trip_input_fingerprint(trip) -> str:
+    payload = {
+        "id": getattr(trip, "id", None),
+        "destination": trip.destination,
+        "start_date": trip.start_date.isoformat(),
+        "end_date": trip.end_date.isoformat(),
+        "budget": float(trip.budget),
+        "people": trip.people,
+        "interests": list(trip.interests),
+        "pace": trip.pace,
+        "notes": trip.notes,
+    }
+    serialized = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return sha256(serialized.encode("utf-8")).hexdigest()
 
 
 # === 行程生成子图：显式编排模型、工具和质量验证 ===
@@ -601,6 +624,7 @@ def run_planning_graph(agent, trip) -> dict:
         config["configurable"] = {"thread_id": agent.thread_id}
     graph = builder.compile(checkpointer=checkpointer)
     initial_state = {
+            "input_fingerprint": _trip_input_fingerprint(trip),
             "context": context,
             "messages": build_agent_messages(
                 trip,
@@ -620,6 +644,13 @@ def run_planning_graph(agent, trip) -> dict:
     if checkpointer is not None:
         snapshot = graph.get_state(config)
         if snapshot.values:
+            if (
+                snapshot.values.get("input_fingerprint")
+                != initial_state["input_fingerprint"]
+            ):
+                raise ValueError(
+                    "Generation checkpoint does not match the current trip"
+                )
             if snapshot.values.get("result") is not None:
                 return snapshot.values["result"]
             graph_input = None

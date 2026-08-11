@@ -285,6 +285,59 @@ class ItineraryGenerationApiTests(unittest.TestCase):
             self.assertEqual(db.query(models.TripDay).count(), 0)
             self.assertEqual(db.query(models.Activity).count(), 0)
 
+    @patch("app.generation.service.generate_itinerary_with_tools")
+    def test_reused_sqlite_run_id_gets_a_new_checkpoint_thread(
+        self,
+        mock_generate,
+    ):
+        mock_generate.return_value = _agent_itinerary()
+
+        first_response = self.client.post(
+            f"/trips/{self.trip_id}/generate"
+        )
+        self.assertEqual(first_response.status_code, 202)
+        self.assertTrue(run_worker_once())
+        first_call = mock_generate.call_args_list[0]
+        first_thread_id = first_call.kwargs["graph_thread_id"]
+
+        with self.TestingSessionLocal() as db:
+            first_trip = db.get(models.Trip, self.trip_id)
+            db.delete(first_trip)
+            db.commit()
+
+            replacement = models.Trip(
+                user_id=self.owner_id,
+                destination="江苏省扬州市",
+                start_date=date(2026, 10, 3),
+                end_date=date(2026, 10, 3),
+                budget=800,
+                people=1,
+                interests=["园林"],
+                pace="relaxed",
+                notes=None,
+                status="pending",
+            )
+            db.add(replacement)
+            db.commit()
+            replacement_id = replacement.id
+
+        self.assertEqual(replacement_id, self.trip_id)
+        second_response = self.client.post(
+            f"/trips/{replacement_id}/generate"
+        )
+        self.assertEqual(second_response.status_code, 202)
+        self.assertTrue(run_worker_once())
+        second_call = mock_generate.call_args_list[1]
+        second_thread_id = second_call.kwargs["graph_thread_id"]
+
+        self.assertEqual(first_response.json()["run_id"], 1)
+        self.assertEqual(second_response.json()["run_id"], 1)
+        self.assertNotEqual(first_thread_id, second_thread_id)
+        self.assertEqual(
+            second_call.args[0].destination,
+            "江苏省扬州市",
+        )
+
     def test_worker_returns_false_when_queue_is_empty(self):
         self.assertFalse(run_worker_once())
 

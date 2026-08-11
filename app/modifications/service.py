@@ -6,8 +6,11 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.db import models
+from app.integrations.amap import search_place
 from app.itinerary.editor import apply_itinerary_operations
 from app.itinerary.schemas import (
+    ActivityCreateInput,
+    ActivityUpdateInput,
     AddActivityOperation,
     ItineraryOperationsRequest,
     MoveActivityOperation,
@@ -30,6 +33,84 @@ class ModificationProposalConflict(ModificationProposalError):
 
 class ModificationProposalInvalid(ModificationProposalError):
     """AI 提案引用非法资源或违反业务规则。"""
+
+
+def _verify_proposed_place(
+    *,
+    name: str,
+    location: str,
+    destination: str,
+) -> dict:
+    try:
+        verified_place = search_place(
+            name=name,
+            location=location,
+            destination=destination,
+        )
+    except Exception as exc:
+        raise ModificationProposalInvalid(
+            "高德地点验证暂时不可用，请稍后重新生成修改建议"
+        ) from exc
+    if verified_place is None:
+        raise ModificationProposalInvalid(
+            f"未能在高德中确认地点“{name}”，请换一个具体地点"
+        )
+    return verified_place
+
+
+# === 修改提案地点预检：卡片出现前先绑定真实高德名称和地址 ===
+# 流程：AI 操作 → 提取新增/改名地点 → 高德验证 → 标准名称覆盖 → 创建卡片
+def verify_proposal_places(
+    db: Session,
+    trip: models.Trip,
+    request: ItineraryOperationsRequest,
+) -> ItineraryOperationsRequest:
+    verified_request = request.model_copy(deep=True)
+    for operation in verified_request.operations:
+        if isinstance(operation, AddActivityOperation):
+            place = _verify_proposed_place(
+                name=operation.activity.name,
+                location=operation.activity.location,
+                destination=trip.destination,
+            )
+            activity_data = operation.activity.model_dump()
+            activity_data.update(
+                {
+                    "name": place.get("name") or operation.activity.name,
+                    "location": (
+                        place.get("address") or operation.activity.location
+                    ),
+                }
+            )
+            operation.activity = ActivityCreateInput.model_validate(
+                activity_data
+            )
+            continue
+
+        if not isinstance(operation, UpdateActivityOperation):
+            continue
+        changed_fields = operation.changes.model_fields_set
+        if not ({"name", "location"} & changed_fields):
+            continue
+        activity, _ = _get_activity(db, trip.id, operation.activity_id)
+        requested_name = operation.changes.name or activity.name
+        requested_location = operation.changes.location or activity.location
+        place = _verify_proposed_place(
+            name=requested_name,
+            location=requested_location,
+            destination=trip.destination,
+        )
+        changes_data = operation.changes.model_dump(exclude_unset=True)
+        changes_data.update(
+            {
+                "name": place.get("name") or requested_name,
+                "location": place.get("address") or requested_location,
+            }
+        )
+        operation.changes = ActivityUpdateInput.model_validate(
+            changes_data
+        )
+    return verified_request
 
 
 # === 行程快照：生成稳定指纹，防止旧提案覆盖新修改 ===
@@ -303,6 +384,7 @@ def create_modification_proposal(
     message: str,
     request: ItineraryOperationsRequest,
 ) -> models.ModificationProposal:
+    request = verify_proposal_places(db, trip, request)
     snapshot = build_itinerary_snapshot(db, trip)
     proposal = models.ModificationProposal(
         trip_id=trip.id,

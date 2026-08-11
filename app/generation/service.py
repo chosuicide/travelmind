@@ -1,6 +1,7 @@
 import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
+from hashlib import sha256
 from typing import Callable
 
 from sqlalchemy.orm import Session
@@ -20,6 +21,7 @@ MAX_TRACE_EVENTS = 100
 @dataclass(frozen=True)
 class TripGenerationInput:
     id: int
+    checkpoint_thread_id: str
     destination: str
     start_date: date
     end_date: date
@@ -28,6 +30,15 @@ class TripGenerationInput:
     interests: list
     pace: str
     notes: str | None
+
+
+def _checkpoint_thread_id(run: models.GenerationRun) -> str:
+    identity = (
+        f"{run.id}:{run.trip_id}:{run.user_id}:"
+        f"{run.created_at.isoformat(timespec='microseconds')}"
+    )
+    digest = sha256(identity.encode("utf-8")).hexdigest()[:16]
+    return f"generation-{run.id}-{digest}"
 
 
 @dataclass
@@ -287,6 +298,7 @@ def _start_run(run_id: int) -> TripGenerationInput | None:
 
         trip_input = TripGenerationInput(
             id=trip.id,
+            checkpoint_thread_id=_checkpoint_thread_id(run),
             destination=trip.destination,
             start_date=trip.start_date,
             end_date=trip.end_date,
@@ -473,7 +485,7 @@ def run_generation_task(run_id: int) -> bool:
             on_quality_result=telemetry.record_quality,
             on_model_usage=telemetry.record_model_usage,
             on_graph_event=telemetry.record_graph,
-            graph_thread_id=f"generation-{run_id}",
+            graph_thread_id=trip_input.checkpoint_thread_id,
         )
         _complete_run(run_id, itinerary, telemetry)
         return True
